@@ -1,0 +1,44 @@
+﻿import { useVirtualOS } from "../../state/VirtualOSContext";
+
+export function Dock() {
+  const { goBack, goHome, state, toggleTabs, setTabsOpen } = useVirtualOS();
+
+  function handleBack() {
+    const ev = new CustomEvent("virtual-os-back", { cancelable: true });
+    window.dispatchEvent(ev);
+    if (!ev.defaultPrevented) {
+      goBack();
+    }
+  }
+
+  return (
+    <footer className="system-nav-wrap">
+      <div className="system-nav">
+        <button type="button" className="sys-btn" onClick={handleBack} aria-label="Back">
+          <span className="icon-back" />
+        </button>
+        <button
+          type="button"
+          className="sys-btn"
+          onClick={() => {
+            setTabsOpen(false);
+            goHome();
+          }}
+          aria-label="Home"
+        >
+          <span className="icon-home" />
+        </button>
+        <button
+          type="button"
+          className={`sys-btn ${state.tabSwitcherOpen ? "active" : ""}`}
+          onClick={toggleTabs}
+          aria-label="Tabs"
+        >
+          <span className="icon-tabs" />
+        </button>
+      </div>
+      <div className="gesture-pill" />
+    </footer>
+  );
+}
+
