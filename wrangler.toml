@@ -1,0 +1,27 @@
+name = "daily-digital"
+main = "worker/index.js"
+compatibility_date = "2026-06-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[vars]
+# Comma-separated production origins. Leave empty while testing same-origin deploys.
+ALLOWED_ORIGINS = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "daily-digital-db"
+# Replace after running: npx wrangler d1 create daily-digital-db
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "SESSION_DO"
+class_name = "SessionCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionCoordinator"]

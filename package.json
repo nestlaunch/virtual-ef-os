@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "test": "node scripts/recordsMetrics.test.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "worker:dev": "npm run build && npx wrangler dev",
+    "d1:migrate": "npx wrangler d1 migrations apply daily-digital-db --remote",
+    "deploy:worker": "npm run build && npx wrangler deploy"
   },
   "dependencies": {
     "framer-motion": "^11.18.2",

@@ -280,6 +280,50 @@ VITE_GEMINI_MODEL=gemini-2.0-flash
 
 If no valid key is provided, the app should continue to function without AI-generated replies.
 
+For production, do not expose clinical or AI service secrets through `VITE_*` variables. Move any third-party API calls into the Cloudflare Worker and store secrets with `npx wrangler secret put`.
+
+## Cloudflare Backend
+
+Daily Digital now includes a deployable Cloudflare backend foundation:
+
+```text
+worker/index.js              Worker API and SessionCoordinator Durable Object
+migrations/0001_initial.sql  D1 schema
+wrangler.toml                Worker, assets, D1, and Durable Object bindings
+```
+
+The Worker serves the built frontend from `dist` and exposes `/api/*` routes for accounts, session PINs, live session actions, and report records.
+
+Core commands:
+
+```bash
+npm run build
+npx wrangler d1 create daily-digital-db
+npx wrangler d1 migrations apply daily-digital-db --remote
+npm run deploy:worker
+```
+
+After creating the D1 database, copy the returned database ID into `wrangler.toml`.
+
+Current backend routes:
+
+```text
+GET  /api/health
+GET  /api/accounts
+POST /api/accounts
+POST /api/login
+POST /api/sessions
+GET  /api/sessions/:pin/state
+POST /api/sessions/:pin/join
+POST /api/sessions/:pin/push
+POST /api/sessions/:pin/event
+POST /api/sessions/:pin/end
+POST /api/records
+GET  /api/accounts/:id/report
+```
+
+The current React app can still run in browser-local prototype mode. The next integration step is replacing local session storage with calls to these Worker routes.
+
 ## Project Structure
 
 ```text
@@ -313,15 +357,13 @@ The main state model lives in `src/state/VirtualOSContext.jsx`. Seed clinical sc
 
 Recommended next milestones:
 
-1. Add admin-facing checklist scoring.
-2. Add explicit Learn, Practice, and Assessment modes.
-3. Expand event tracking for latency, input focus, typing, back/home actions, and hint use.
-4. Add a session report screen.
-5. Add browser-only patient session codes.
-6. Add Cloudflare Worker API and D1 schema.
-7. Add durable live session logging.
-8. Add report export to PDF.
-9. Add privacy, consent, retention, and audit controls.
+1. Connect the React session/account flows to the Worker API.
+2. Connect live admin/user updates to the SessionCoordinator Durable Object.
+3. Persist final Learn, Practice, and Assessment report-card records to D1.
+4. Move optional AI conversation calls into Worker secrets.
+5. Add admin authentication and role-based route protection.
+6. Add report export to PDF.
+7. Add privacy, consent, retention, and audit controls.
 
 ## Design North Star
 
