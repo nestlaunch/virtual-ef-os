@@ -3,7 +3,7 @@ import { formalThreads, initialEvents, calendarMeta } from "./seedData";
 import { APP_CATALOG, SCENARIO_LIBRARY, createInitialChecklistScores } from "./v2Assessment";
 import { createDeviceId, createParticipantPin, createSessionPin, liveStateStorageKey, loadLocalDeviceState, loadStoredLiveState, loadStoredSession, saveLocalDeviceState, saveStoredLiveState, saveStoredSession } from "./sessionStore";
 import { summarizeInteractions } from "./sessionMetrics";
-import { applyLearnModuleAssignment, applyModeSelection, applyScenarioAssignment, attachExperienceRatingToRecords, canJoinActiveSession, clearEndedSessionForPush, invalidateCompletedSessionPin, preserveLocalSessionIdentity, resetSessionForNewPin, resolveInitialCurrentApp, resolvePushTargets, shouldAdoptSharedApp, startAssessmentTiming } from "./sessionLifecycle";
+import { applyLearnModuleAssignment, applyModeSelection, applyScenarioAssignment, attachExperienceRatingToRecords, canJoinActiveSession, clearEndedSessionForPush, getCurrentAssignment, invalidateCompletedSessionPin, preserveLocalSessionIdentity, resetSessionForNewPin, resolveInitialCurrentApp, resolvePushTargets, shouldAdoptSharedApp, startAssessmentTiming } from "./sessionLifecycle";
 import { baseLearnMetrics, mergeLearnAccountMetrics, mergeLearnMetrics, updateLearnAccuracy } from "./learnMetrics";
 import { appendParticipantProgressRecord, createTaskEvidenceSnapshot, getParticipantScenarioRecord } from "./progressRecords";
 import { removeAccountsFromByAccount } from "./modeMetrics";
