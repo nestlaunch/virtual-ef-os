@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 
 const LOCATIONS = [
+  { id: "home", name: "Home", short: "Home", x: 18, y: 52, kind: "Residence" },
   { id: "ang-mo-kio-mrt", name: "Ang Mo Kio MRT", short: "AMK MRT", x: 22, y: 22, kind: "Train station" },
   { id: "hougang-mrt", name: "Hougang MRT", short: "HG MRT", x: 78, y: 32, kind: "Train station" },
   { id: "imh", name: "IMH", short: "IMH", x: 44, y: 70, kind: "Hospital" },
@@ -9,6 +10,10 @@ const LOCATIONS = [
 ];
 
 const ROUTE_TIMES = {
+  "home|ang-mo-kio-mrt": { transit: 11, walk: 28, via: "Bus 261 / walk to MRT" },
+  "home|hougang-mrt": { transit: 18, walk: 62, via: "Bus 72 / MRT connection" },
+  "home|imh": { transit: 22, walk: 48, via: "Bus 88 / local bus" },
+  "home|hougang-polyclinic": { transit: 14, walk: 35, via: "Bus 325" },
   "ang-mo-kio-mrt|hougang-mrt": { transit: 18, walk: 74, via: "Bus 165 / MRT transfer" },
   "ang-mo-kio-mrt|imh": { transit: 16, walk: 42, via: "Bus 88 / 159" },
   "ang-mo-kio-mrt|hougang-polyclinic": { transit: 29, walk: 86, via: "MRT + Bus 325" },
@@ -18,6 +23,31 @@ const ROUTE_TIMES = {
 };
 
 const ROUTE_PATHS = {
+  "home|ang-mo-kio-mrt": [
+    [18, 52],
+    [19, 42],
+    [20, 31],
+    [22, 22],
+  ],
+  "home|hougang-mrt": [
+    [18, 52],
+    [36, 47],
+    [54, 40],
+    [78, 32],
+  ],
+  "home|imh": [
+    [18, 52],
+    [28, 58],
+    [36, 64],
+    [44, 70],
+  ],
+  "home|hougang-polyclinic": [
+    [18, 52],
+    [36, 54],
+    [55, 61],
+    [70, 69],
+    [82, 76],
+  ],
   "ang-mo-kio-mrt|hougang-mrt": [
     [22, 22],
     [35, 25],
@@ -192,6 +222,9 @@ export function MapsApp() {
     if (canShowRoute) {
       setShowRoute(true);
       setSheetExpanded(false);
+      window.dispatchEvent(new CustomEvent("virtual-os-learn-maps-route", {
+        detail: { origin, destination, mode, durationMinutes: route.minutes },
+      }));
     }
   }
 

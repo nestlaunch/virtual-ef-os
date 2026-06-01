@@ -14,12 +14,13 @@ export function Dock() {
   return (
     <footer className="system-nav-wrap">
       <div className="system-nav">
-        <button type="button" className="sys-btn" onClick={handleBack} aria-label="Back">
+        <button type="button" className="sys-btn" data-learn-target="nav-back" onClick={handleBack} aria-label="Back">
           <span className="icon-back" />
         </button>
         <button
           type="button"
           className="sys-btn"
+          data-learn-target="nav-home"
           onClick={() => {
             setTabsOpen(false);
             goHome();
@@ -31,6 +32,7 @@ export function Dock() {
         <button
           type="button"
           className={`sys-btn ${state.tabSwitcherOpen ? "active" : ""}`}
+          data-learn-target="nav-tabs"
           onClick={toggleTabs}
           aria-label="Tabs"
         >

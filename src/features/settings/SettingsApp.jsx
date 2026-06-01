@@ -1,8 +1,11 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { APP_CATALOG } from "../../state/v2Assessment";
 import { weeklyRules } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
+import { getDoctorAppointmentTarget } from "../taskAnswerChecks";
+import { clearAllWhatsAppStorage } from "../whatsapp/whatsappSession";
 
-const WA_STORAGE_KEY = "virtual-os-whatsapp-state-v1";
+const DOCTOR_APPOINTMENT_TARGET = getDoctorAppointmentTarget();
 
 function fmtTime(minutes) {
   const h = String(Math.floor((minutes ?? 0) / 60)).padStart(2, "0");
@@ -10,13 +13,13 @@ function fmtTime(minutes) {
   return `${h}:${m}`;
 }
 
-function text(v) {
-  return String(v || "").toLowerCase();
+function text(value) {
+  return String(value || "").toLowerCase();
 }
 
 function titleHasAny(event, keywords) {
-  const t = text(event.title);
-  return keywords.some((kw) => t.includes(kw));
+  const title = text(event.title);
+  return keywords.some((keyword) => title.includes(keyword));
 }
 
 function formatDuration(ms) {
@@ -29,10 +32,26 @@ function formatDuration(ms) {
   return `${min}m ${sec}s`;
 }
 
+function pct(correct, total) {
+  return total > 0 ? `${Math.round((correct / total) * 100)}%` : "-";
+}
+
+function getLearnAppTime(learn, app, activeLearnApps = new Set(), now = Date.now()) {
+  const saved = learn.timeByAppMs?.[app] || 0;
+  const running = activeLearnApps.has(app) && learn.moduleStarts?.[app]
+    ? Math.max(0, now - learn.moduleStarts[app])
+    : 0;
+  return saved + running;
+}
+
+function getLearnTotalTime(learn, activeLearnApps = new Set(), now = Date.now()) {
+  return APP_CATALOG.reduce((sum, app) => sum + getLearnAppTime(learn, app.currentApp, activeLearnApps, now), 0);
+}
+
 function isExactMatch(event, target) {
   const sameDate = event.date === target.date
-    && (event.month ?? 2) === target.month
-    && (event.year ?? 2026) === target.year;
+    && (event.month ?? target.month) === target.month
+    && (event.year ?? target.year) === target.year;
   if (!sameDate) {
     return false;
   }
@@ -41,19 +60,10 @@ function isExactMatch(event, target) {
 
 function hasLocationErrorMatch(event, target) {
   const sameDate = event.date === target.date
-    && (event.month ?? 2) === target.month
-    && (event.year ?? 2026) === target.year;
+    && (event.month ?? target.month) === target.month
+    && (event.year ?? target.year) === target.year;
   const sameTime = Math.abs((event.start ?? 0) - target.start) <= 30;
-
-  if (sameDate && !sameTime) {
-    return true;
-  }
-
-  if (!sameDate && sameTime) {
-    return true;
-  }
-
-  return false;
+  return (sameDate && !sameTime) || (!sameDate && sameTime);
 }
 
 function evaluateFixedAppointment(events, target, keywords) {
@@ -65,7 +75,7 @@ function evaluateFixedAppointment(events, target, keywords) {
   if (exact) {
     return {
       status: "ok",
-      evidence: `Matched ${exact.date}/${(exact.month ?? 2) + 1}/${exact.year ?? 2026} ${fmtTime(exact.start)}`,
+      evidence: `Matched ${exact.date}/${(exact.month ?? target.month) + 1}/${exact.year ?? target.year} ${fmtTime(exact.start)}`,
     };
   }
 
@@ -74,7 +84,7 @@ function evaluateFixedAppointment(events, target, keywords) {
     const sample = related[0];
     return {
       status: "error",
-      evidence: `Found related entry (${sample.title}) at ${sample.date}/${(sample.month ?? 2) + 1}/${sample.year ?? 2026} ${fmtTime(sample.start)} but date/time mismatch`,
+      evidence: `Found related entry (${sample.title}) at ${sample.date}/${(sample.month ?? target.month) + 1}/${sample.year ?? target.year} ${fmtTime(sample.start)} but date/time mismatch`,
     };
   }
 
@@ -94,7 +104,7 @@ function evaluateFriendTask(events, keywords, isValidFn, expectation) {
   if (valid) {
     return {
       status: "ok",
-      evidence: `Matched ${valid.title} at ${valid.date}/${(valid.month ?? 2) + 1}/${valid.year ?? 2026} ${fmtTime(valid.start)}`,
+      evidence: `Matched ${valid.title} at ${valid.date}/${(valid.month ?? DOCTOR_APPOINTMENT_TARGET.month) + 1}/${valid.year ?? DOCTOR_APPOINTMENT_TARGET.year} ${fmtTime(valid.start)}`,
     };
   }
 
@@ -142,6 +152,26 @@ function buildAccuracyMetrics(events, targets) {
   };
 }
 
+function eventBelongsToAccount(event, accountId) {
+  return !accountId || !event.accountId || event.accountId === accountId;
+}
+
+function countUserWhatsappReplies(state, accountId, threadId) {
+  return state.hiddenLog.filter((entry) => (
+    entry.kind === "wa_reply"
+    && entry.threadId === threadId
+    && (!accountId || !entry.accountId || entry.accountId === accountId)
+  )).length;
+}
+
+function hasUserWhatsappConfirmation(state, accountId, threadId) {
+  return state.hiddenLog.some((entry) => (
+    entry.kind === "wa_friend_confirm"
+    && entry.threadId === threadId
+    && (!accountId || !entry.accountId || entry.accountId === accountId)
+  ));
+}
+
 export function SettingsApp() {
   const { state, helpers, resetEvaluation, markEvaluationCompleted } = useVirtualOS();
   const containerRef = useRef(null);
@@ -150,40 +180,46 @@ export function SettingsApp() {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) {
-      return;
+      return undefined;
     }
+
     const onScroll = () => {
       const threshold = 6;
       const reached = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold;
       setAtBottom(reached || el.scrollHeight <= el.clientHeight + threshold);
     };
+
     onScroll();
     el.addEventListener("scroll", onScroll);
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  const doctorAppt = helpers.rigidAppointments.find((a) => a.id === "sms-doctor-main");
-  const polyAppt = helpers.rigidAppointments.find((a) => a.id === "sms-polyclinic-main");
+  const doctorAppt = helpers.rigidAppointments.find((appointment) => appointment.id === "sms-doctor-main");
+  const polyAppt = helpers.rigidAppointments.find((appointment) => appointment.id === "sms-polyclinic-main");
+  const currentUserId = state.session.currentUserId;
+  const visibleEvents = useMemo(() => (
+    state.events.filter((event) => eventBelongsToAccount(event, currentUserId))
+  ), [state.events, currentUserId]);
 
-  const jiaReplyCount = state.metrics.whatsappReplies["jia-wei"] ?? 0;
-  const nadiahReplyCount = state.metrics.whatsappReplies.nadiah ?? 0;
+  const jiaReplyCount = countUserWhatsappReplies(state, currentUserId, "jia-wei");
+  const nadiahReplyCount = countUserWhatsappReplies(state, currentUserId, "nadiah");
 
-  const doctorEval = evaluateFixedAppointment(state.events, doctorAppt, ["doctor", "psy", "psychiatry", "clinic b"]);
-  const polyEval = evaluateFixedAppointment(state.events, polyAppt, ["poly", "polyclinic"]);
+  const doctorEval = evaluateFixedAppointment(visibleEvents, doctorAppt, ["doctor", "psy", "psychiatry", "clinic b"]);
+  const polyEval = evaluateFixedAppointment(visibleEvents, polyAppt, ["poly", "polyclinic"]);
   const jiaEventEval = evaluateFriendTask(
-    state.events,
+    visibleEvents,
     ["jia", "wei"],
     (event) => (event.start ?? 0) >= 15 * 60,
     "Expected: Jia Wei meeting entered with afternoon timing (>=15:00)"
   );
   const nadiahEventEval = evaluateFriendTask(
-    state.events,
+    visibleEvents,
     ["nadiah"],
     (event) => (event.start ?? 0) >= 15 * 60,
     "Expected: Nadiah meeting entered after 15:00"
   );
   const familyDinnerEval = evaluateFriendTask(
-    state.events,
+    visibleEvents,
     ["family", "dinner"],
     (event) => (event.start ?? 0) >= 18 * 60 + 30,
     "Expected: Family dinner entered in evening (>=18:30)"
@@ -211,9 +247,11 @@ export function SettingsApp() {
       evidence: `Replies: ${nadiahReplyCount}`,
     },
     {
-      task: "WhatsApp: Friend confirmed meeting (Jia Wei)",
-      status: state.metrics.whatsappFriendConfirmed["jia-wei"] ? "ok" : "pending",
-      evidence: state.metrics.whatsappFriendConfirmed["jia-wei"] ? "Detected friend acknowledgment (e.g., 'See you then')" : "Not detected",
+      task: "WhatsApp: Contact confirmed meeting with Jia Wei",
+      status: hasUserWhatsappConfirmation(state, currentUserId, "jia-wei") ? "ok" : "pending",
+      evidence: hasUserWhatsappConfirmation(state, currentUserId, "jia-wei")
+        ? "Detected contact acknowledgement"
+        : "Not detected",
     },
     {
       task: "Calendar: Friend appointment from Jia Wei chat entered",
@@ -233,14 +271,20 @@ export function SettingsApp() {
   ];
 
   const accuracy = useMemo(() => {
-    const targets = helpers.rigidAppointments.filter((a) => a.id === "sms-doctor-main" || a.id === "sms-polyclinic-main");
-    return buildAccuracyMetrics(state.events, targets);
-  }, [state.events, helpers.rigidAppointments]);
+    const targets = helpers.rigidAppointments.filter((appointment) => (
+      appointment.id === "sms-doctor-main" || appointment.id === "sms-polyclinic-main"
+    ));
+    return buildAccuracyMetrics(visibleEvents, targets);
+  }, [visibleEvents, helpers.rigidAppointments]);
 
   const now = Date.now();
   const totalTimeMs = state.session.completedAt ? state.session.completedAt - state.session.startedAt : null;
   const planningTimeMs = state.session.firstEntryAt ? state.session.firstEntryAt - state.session.startedAt : null;
   const activeDurationMs = now - state.session.startedAt;
+  const currentMode = state.session.userModes[state.session.currentUserId] || state.session.mode;
+  const learn = state.learnMetrics || {};
+  const attempts = learn.attempts || { correct: 0, total: 0 };
+  const activeLearnApps = new Set(Object.values(state.session.learnModules || {}));
 
   function handleReset() {
     if (!atBottom) {
@@ -251,12 +295,57 @@ export function SettingsApp() {
       return;
     }
     try {
-      window.localStorage.removeItem(WA_STORAGE_KEY);
+      clearAllWhatsAppStorage(window.localStorage);
     } catch {
       // Ignore storage failures during reset.
     }
     resetEvaluation();
     window.dispatchEvent(new CustomEvent("virtual-os-reset-evaluation"));
+  }
+
+  if (currentMode === "learn") {
+    return (
+      <div className="settings-app" ref={containerRef}>
+        <h2>Learn Evaluation</h2>
+        <section className="learn-evaluation-panel">
+          <h3>Learning Outcomes</h3>
+          <div className="learn-eval-summary">
+            <div><span>Modules completed</span><strong>{learn.modulesCompleted || 0}</strong></div>
+            <div><span>Time spent on modules</span><strong>{formatDuration(getLearnTotalTime(learn, activeLearnApps, now))}</strong></div>
+            <div>
+              <span>Accurate clicks / answers</span>
+              <strong>{pct(attempts.correct || 0, attempts.total || 0)}</strong>
+              <p>{attempts.correct || 0}/{attempts.total || 0} accurate</p>
+            </div>
+          </div>
+          <div className="learn-eval-apps">
+            <div className="learn-eval-row head">
+              <span>App</span>
+              <span>Completed</span>
+              <span>Time</span>
+              <span>Accuracy</span>
+            </div>
+            {APP_CATALOG.map((app) => {
+              const appMetrics = learn.byApp?.[app.currentApp] || { correct: 0, total: 0 };
+              return (
+                <div key={app.id} className="learn-eval-row">
+                  <strong>{app.label}</strong>
+                  <span>{learn.completedByApp?.[app.currentApp] || 0}</span>
+                  <span>{formatDuration(getLearnAppTime(learn, app.currentApp, activeLearnApps, now))}</span>
+                  <span>{pct(appMetrics.correct || 0, appMetrics.total || 0)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        <section className="reset-eval-wrap">
+          <p>{atBottom ? "Reset is enabled." : "Scroll to the bottom to enable reset."}</p>
+          <button type="button" disabled={!atBottom} className="reset-eval-btn" onClick={handleReset}>
+            Restart Evaluation
+          </button>
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -272,7 +361,7 @@ export function SettingsApp() {
       </section>
 
       <section className="eval-table-wrap">
-        <h3>Therapist Task Checklist</h3>
+        <h3>Admin Task Checklist</h3>
         <table className="eval-table">
           <thead>
             <tr>
@@ -331,7 +420,7 @@ export function SettingsApp() {
         <p>Perseveration: {state.metrics.perseveration}</p>
         <p>Rule breaking: {state.metrics.ruleBreaking}</p>
         <p>Context switches: {state.metrics.contextSwitches}</p>
-        <p>WhatsApp replies tracked: {Object.values(state.metrics.whatsappReplies).reduce((a, b) => a + b, 0)}</p>
+        <p>WhatsApp replies tracked: {Object.values(state.metrics.whatsappReplies).reduce((sum, count) => sum + count, 0)}</p>
       </section>
 
       <section className="reset-eval-wrap">

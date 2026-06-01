@@ -2,8 +2,11 @@
 import { whatsappThreads } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { analyzeWhatsAppTurn } from "../../services/geminiClient";
+import { findStimulus, getVisibleThreadIdsForState } from "../../state/stimulusSequence";
+import { getCurrentAssignment } from "../../state/sessionLifecycle";
+import { clearWhatsAppStorage, getWhatsAppStorageKey } from "./whatsappSession";
 
-const WA_STORAGE_KEY = "virtual-os-whatsapp-state-v1";
+const MAX_USER_REPLIES_PER_THREAD = 5;
 
 function createMessageId(prefix) {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -21,9 +24,9 @@ function deepCloneThreads() {
   }));
 }
 
-function loadPersistedThreads() {
+function loadPersistedThreads(storageKey) {
   try {
-    const raw = window.localStorage.getItem(WA_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) {
       return deepCloneThreads();
     }
@@ -117,16 +120,28 @@ function buildFallbackReply(threadId, userMessage, history) {
 }
 
 export function WhatsAppApp() {
-  const { trackWhatsAppReply, trackWhatsAppConfirmation, trackWhatsAppFriendConfirmation } = useVirtualOS();
-  const [threads, setThreads] = useState(() => loadPersistedThreads());
+  const { state, markStimulusRead, trackWhatsAppReply, trackWhatsAppConfirmation, trackWhatsAppFriendConfirmation } = useVirtualOS();
+  const effectiveMode = state.session.currentUserId
+    ? state.session.userModes[state.session.currentUserId] || state.session.mode
+    : state.session.mode;
+  const isWhatsAppLearn = effectiveMode === "learn" && state.session.learnModules?.[state.session.currentUserId] === "whatsapp";
+  const storageKey = getWhatsAppStorageKey(state.session, effectiveMode);
+  const [threads, setThreads] = useState(() => loadPersistedThreads(storageKey));
   const [activeId, setActiveId] = useState(null);
   const [draft, setDraft] = useState("");
   const [replyNotice, setReplyNotice] = useState(null);
+  const currentAssignment = getCurrentAssignment(state.session, state.session.currentUserId, effectiveMode);
 
   const activeIdRef = useRef(activeId);
   const pendingTimersRef = useRef([]);
 
-  const active = useMemo(() => threads.find((t) => t.id === activeId), [threads, activeId]);
+  const visibleIds = getVisibleThreadIdsForState("whatsapp", state);
+  const visibleThreads = isWhatsAppLearn
+    ? threads.filter((thread) => ["jia-wei", "nadiah", "family"].includes(thread.id))
+    : threads.filter((thread) => visibleIds.includes(thread.id));
+  const active = useMemo(() => visibleThreads.find((t) => t.id === activeId), [visibleThreads, activeId]);
+  const activeUserReplyCount = active?.messages.filter((message) => message.mine).length || 0;
+  const conversationLimitReached = activeUserReplyCount >= MAX_USER_REPLIES_PER_THREAD;
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -134,11 +149,11 @@ export function WhatsAppApp() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(WA_STORAGE_KEY, JSON.stringify(threads));
+      window.localStorage.setItem(storageKey, JSON.stringify(threads));
     } catch {
       // Ignore storage write failures so chat flow still works.
     }
-  }, [threads]);
+  }, [storageKey, threads]);
 
   useEffect(() => {
     return () => {
@@ -167,14 +182,42 @@ export function WhatsAppApp() {
       setDraft("");
       setReplyNotice(null);
       try {
-        window.localStorage.removeItem(WA_STORAGE_KEY);
+        clearWhatsAppStorage(window.localStorage, storageKey);
       } catch {
         // Ignore storage errors during reset.
       }
     }
     window.addEventListener("virtual-os-reset-evaluation", onReset);
     return () => window.removeEventListener("virtual-os-reset-evaluation", onReset);
-  }, []);
+  }, [storageKey]);
+
+  useEffect(() => {
+    pendingTimersRef.current.forEach((timer) => clearTimeout(timer));
+    pendingTimersRef.current = [];
+    setThreads(deepCloneThreads());
+    setActiveId(null);
+    setDraft("");
+      setReplyNotice(null);
+      try {
+        clearWhatsAppStorage(window.localStorage, storageKey);
+      } catch {
+        // Ignore storage errors during session refresh.
+      }
+  }, [state.session.startedAt, storageKey]);
+
+  useEffect(() => {
+    pendingTimersRef.current.forEach((timer) => clearTimeout(timer));
+    pendingTimersRef.current = [];
+    setThreads(deepCloneThreads());
+    setActiveId(null);
+    setDraft("");
+    setReplyNotice(null);
+    try {
+      clearWhatsAppStorage(window.localStorage, storageKey);
+    } catch {
+      // Ignore storage errors during assignment refresh.
+    }
+  }, [state.session.currentUserId, currentAssignment?.id, storageKey]);
 
   function showReplyNotification(sender, text) {
     setReplyNotice({ id: Date.now(), sender, text });
@@ -183,6 +226,10 @@ export function WhatsAppApp() {
   }
 
   function openThread(threadId) {
+    const stimulus = findStimulus("whatsapp", threadId);
+    if (stimulus) {
+      markStimulusRead(stimulus.id);
+    }
     setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, unreadMessages: 0 } : t)));
     setActiveId(threadId);
   }
@@ -218,6 +265,11 @@ export function WhatsAppApp() {
     if (!activeThreadSnapshot) {
       return;
     }
+    const userReplyCount = activeThreadSnapshot.messages.filter((message) => message.mine).length;
+    if (userReplyCount >= MAX_USER_REPLIES_PER_THREAD) {
+      showReplyNotification(activeThreadSnapshot.sender, "Conversation limit reached for this practice chat.");
+      return;
+    }
 
     const historyWithUser = [...activeThreadSnapshot.messages, { id: createMessageId("mine"), mine: true, text: content }];
 
@@ -231,6 +283,9 @@ export function WhatsAppApp() {
     });
 
     trackWhatsAppReply(threadId);
+    if (!isWhatsAppLearn || threadId === "family") {
+      window.dispatchEvent(new CustomEvent("virtual-os-learn-whatsapp-replied", { detail: { threadId } }));
+    }
     setDraft("");
 
     const scenarioHint = threadId === "jia-wei"
@@ -293,7 +348,11 @@ export function WhatsAppApp() {
         </header>
         <div className="wa-thread-body">
           {active.messages.map((msg) => (
-            <p key={msg.id} className={`wa-bubble ${msg.mine ? "mine" : ""}`}>
+            <p
+              key={msg.id}
+              className={`wa-bubble ${msg.mine ? "mine" : ""}`}
+              data-learn-target={isWhatsAppLearn && active.id === "family" && !msg.mine ? "wa-dinner-bubble" : undefined}
+            >
               {msg.text}
             </p>
           ))}
@@ -301,16 +360,20 @@ export function WhatsAppApp() {
         <div className="wa-input-row">
           <input
             value={draft}
+            disabled={conversationLimitReached}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 sendReply(draft);
               }
             }}
-            placeholder="Type message"
+            placeholder={conversationLimitReached ? "Conversation limit reached" : "Type message"}
           />
-          <button type="button" onClick={() => sendReply(draft)}>Send</button>
+          <button type="button" disabled={conversationLimitReached} onClick={() => sendReply(draft)}>Send</button>
         </div>
+        {conversationLimitReached ? (
+          <p className="wa-limit-note">Conversation limit reached for this chat.</p>
+        ) : null}
       </div>
     );
   }
@@ -332,8 +395,15 @@ export function WhatsAppApp() {
         </nav>
       </header>
       <div className="wa-list">
-        {threads.map((thread) => (
-          <button key={thread.id} type="button" className="wa-row" onClick={() => openThread(thread.id)}>
+        {visibleThreads.map((thread) => (
+          <button
+            key={thread.id}
+            type="button"
+            className="wa-row"
+            data-thread-id={thread.id}
+            data-learn-target={isWhatsAppLearn && thread.id === "family" ? "wa-dinner-row" : undefined}
+            onClick={() => openThread(thread.id)}
+          >
             <span className="wa-avatar">{thread.sender.slice(0, 1)}</span>
             <span className="wa-main">
               <strong>{thread.sender}</strong>
@@ -345,6 +415,7 @@ export function WhatsAppApp() {
             </span>
           </button>
         ))}
+        {visibleThreads.length === 0 ? <p className="thread-bubble">Waiting for new chats.</p> : null}
       </div>
     </div>
   );

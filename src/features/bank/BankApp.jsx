@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useVirtualOS } from "../../state/VirtualOSContext";
 
 const ACCOUNTS = [
   { id: "posb-savings", name: "POSB eSavings", number: "034-1-22-908", balance: 1842.5 },
@@ -39,6 +40,10 @@ function getPayee(id) {
 }
 
 export function BankApp() {
+  const { state } = useVirtualOS();
+  const effectiveMode = state.session.currentUserId
+    ? state.session.userModes[state.session.currentUserId] || state.session.mode
+    : state.session.mode;
   const [screen, setScreen] = useState("login");
   const [transfer, setTransfer] = useState({
     from: ACCOUNTS[0].id,
@@ -46,6 +51,7 @@ export function BankApp() {
     amount: "",
     note: "",
   });
+  const [paymentType, setPaymentType] = useState("transfer");
   const [tokenApproved, setTokenApproved] = useState(false);
   const [scamDecision, setScamDecision] = useState("");
 
@@ -54,6 +60,9 @@ export function BankApp() {
   const numericAmount = Number(transfer.amount);
   const isScamTransfer = Boolean(selectedPayee?.scam);
   const canReview = Boolean(selectedPayee && numericAmount > 0 && numericAmount <= selectedAccount.balance);
+  const isLearnMode = effectiveMode === "learn";
+  const isPracticeMode = effectiveMode === "practice";
+  const availablePayees = isLearnMode ? PAYEES.filter((payee) => !payee.scam) : PAYEES;
 
   const flowProgress = useMemo(() => {
     return [
@@ -68,16 +77,17 @@ export function BankApp() {
     setTransfer((current) => ({ ...current, ...patch }));
   }
 
-  function startNormalTransfer() {
+  function startNormalTransfer(type = "transfer") {
     setScamDecision("");
     setTokenApproved(false);
+    setPaymentType(type);
     setTransfer({
       from: ACCOUNTS[0].id,
-      payee: "hougang-polyclinic",
-      amount: "12.40",
-      note: "Clinic payment",
+      payee: "",
+      amount: "",
+      note: type === "paynow" ? "PayNow practice" : "Payment practice",
     });
-    setScreen("transfer");
+    setScreen("payee");
   }
 
   function startScamScenario() {
@@ -100,6 +110,11 @@ export function BankApp() {
     setScreen(isScamTransfer ? "scam-warning" : "review");
   }
 
+  function choosePayee(payeeId) {
+    updateTransfer({ payee: payeeId });
+    setScreen("amount");
+  }
+
   if (screen === "login") {
     return (
       <div className="bank-app bank-login">
@@ -113,9 +128,11 @@ export function BankApp() {
           <button type="button" className="bank-primary-btn" onClick={() => setScreen("home")}>
             Log in with Digital Token
           </button>
-          <button type="button" className="bank-ghost-btn" onClick={startScamScenario}>
-            Try scam practice first
-          </button>
+          {!isLearnMode ? (
+            <button type="button" className="bank-ghost-btn" onClick={startScamScenario}>
+              Try scam practice first
+            </button>
+          ) : null}
         </div>
         <div className="bank-safety-strip">
           Never share your PIN, OTP, or Digital Token approval with anyone.
@@ -138,10 +155,13 @@ export function BankApp() {
           </section>
           <section className="bank-panel">
             <h3>What should you do?</h3>
+            {isPracticeMode ? (
+              <p className="bank-mode-rule">Practice mode: the task only continues after the safe option is selected.</p>
+            ) : null}
             <div className="bank-choice-grid">
               <button
                 type="button"
-                className={scamDecision === "report" ? "safe" : ""}
+                className={`${scamDecision === "report" ? "safe" : ""} ${isLearnMode ? "guided-correct" : ""}`}
                 onClick={() => setScamDecision("report")}
               >
                 Report and do not transfer
@@ -149,6 +169,7 @@ export function BankApp() {
               <button
                 type="button"
                 className={scamDecision === "call" ? "risky" : ""}
+                disabled={isPracticeMode}
                 onClick={() => setScamDecision("call")}
               >
                 Call the number in the SMS
@@ -156,6 +177,7 @@ export function BankApp() {
               <button
                 type="button"
                 className={scamDecision === "transfer" ? "risky" : ""}
+                disabled={isPracticeMode}
                 onClick={() => setScamDecision("transfer")}
               >
                 Continue with transfer
@@ -207,7 +229,7 @@ export function BankApp() {
               <span>To</span>
               <select value={transfer.payee} onChange={(event) => updateTransfer({ payee: event.target.value })}>
                 <option value="">Choose payee</option>
-                {PAYEES.map((payee) => (
+                {availablePayees.map((payee) => (
                   <option key={payee.id} value={payee.id}>
                     {payee.name}
                   </option>
@@ -250,6 +272,95 @@ export function BankApp() {
     );
   }
 
+  if (screen === "payee") {
+    return (
+      <div className="bank-app">
+        <BankHeader onHome={() => setScreen("home")} />
+        <main className="bank-content">
+          <h2>{paymentType === "paynow" ? "PayNow" : "Transfer"}</h2>
+          <section className="bank-panel">
+            <h3>From account</h3>
+            <label className="bank-account-select">
+              <span>Pay from</span>
+              <select value={transfer.from} onChange={(event) => updateTransfer({ from: event.target.value })}>
+                {ACCOUNTS.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} {maskAccount(account.number)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+          <section className="bank-panel">
+            <h3>Choose recipient</h3>
+            <div className="bank-payee-list">
+              {availablePayees.map((payee) => (
+                <button
+                  key={payee.id}
+                  type="button"
+                  className={`bank-payee-card ${transfer.payee === payee.id ? "selected" : ""}`}
+                  onClick={() => choosePayee(payee.id)}
+                >
+                  <span>{payee.name.slice(0, 1)}</span>
+                  <strong>{payee.name}</strong>
+                  <em>{payee.bank}</em>
+                </button>
+              ))}
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (screen === "amount") {
+    return (
+      <div className="bank-app">
+        <BankHeader onHome={() => setScreen("home")} />
+        <main className="bank-content">
+          <h2>Enter amount</h2>
+          <section className="bank-panel bank-payment-summary">
+            <span>To</span>
+            <strong>{selectedPayee?.name}</strong>
+            <em>{selectedPayee?.bank}</em>
+          </section>
+          <form className="bank-amount-form" onSubmit={submitTransfer}>
+            <label>
+              <span>Amount</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={transfer.amount}
+                onChange={(event) => updateTransfer({ amount: event.target.value })}
+                placeholder="0.00"
+              />
+            </label>
+            <label>
+              <span>Purpose</span>
+              <input
+                value={transfer.note}
+                onChange={(event) => updateTransfer({ note: event.target.value })}
+                placeholder="What is this payment for?"
+              />
+            </label>
+            <div className="bank-payment-summary compact">
+              <span>Available balance</span>
+              <strong>{formatMoney(selectedAccount.balance)}</strong>
+            </div>
+            {numericAmount > selectedAccount.balance ? (
+              <div className="bank-warning">Insufficient simulated balance for this payment.</div>
+            ) : null}
+            <div className="bank-action-row">
+              <button type="button" className="bank-ghost-btn" onClick={() => setScreen("payee")}>Back</button>
+              <button type="submit" className="bank-primary-btn" disabled={!canReview}>Review payment</button>
+            </div>
+          </form>
+        </main>
+      </div>
+    );
+  }
+
   if (screen === "scam-warning") {
     return (
       <div className="bank-app">
@@ -282,7 +393,7 @@ export function BankApp() {
             <button type="button" className="bank-ghost-btn" onClick={() => setScreen("transfer")}>
               Go back and edit
             </button>
-            <button type="button" className="bank-danger-btn" onClick={() => setScreen("review")}>
+            <button type="button" className="bank-danger-btn" disabled={isPracticeMode} onClick={() => setScreen("review")}>
               Continue anyway (practice only)
             </button>
           </div>
@@ -302,16 +413,20 @@ export function BankApp() {
               payee={selectedPayee}
               transfer={transfer}
               isScamTransfer={isScamTransfer}
-              onBack={() => setScreen("transfer")}
+              onBack={() => setScreen("amount")}
               onConfirm={() => setScreen("token")}
             />
           ) : null}
           {screen === "token" ? (
             <TokenScreen
               isScamTransfer={isScamTransfer}
+              isPracticeMode={isPracticeMode}
               onCancel={() => setScreen(isScamTransfer ? "scam-warning" : "review")}
               onApprove={() => {
                 setTokenApproved(true);
+                window.dispatchEvent(new CustomEvent("virtual-os-learn-bank-payment", {
+                  detail: { payee: selectedPayee?.name, amount: transfer.amount },
+                }));
                 setScreen("success");
               }}
             />
@@ -350,9 +465,9 @@ export function BankApp() {
         </section>
 
         <section className="bank-quick-actions">
-          <button type="button" onClick={startNormalTransfer}>Transfer</button>
-          <button type="button" onClick={startNormalTransfer}>PayNow</button>
-          <button type="button" onClick={startScamScenario}>Scam check</button>
+          <button type="button" onClick={() => startNormalTransfer("transfer")}>Transfer</button>
+          <button type="button" onClick={() => startNormalTransfer("paynow")}>PayNow</button>
+          {!isLearnMode ? <button type="button" onClick={startScamScenario}>Scam check</button> : null}
         </section>
 
         <section className="bank-panel">
@@ -368,11 +483,13 @@ export function BankApp() {
           ))}
         </section>
 
-        <section className="bank-panel bank-scam-teaser">
-          <span>Security alert practice</span>
-          <p>Learn what to do when someone claims to be from POSB and asks for an urgent transfer.</p>
-          <button type="button" onClick={startScamScenario}>Start scam scenario</button>
-        </section>
+        {!isLearnMode ? (
+          <section className="bank-panel bank-scam-teaser">
+            <span>Security alert practice</span>
+            <p>Learn what to do when someone claims to be from POSB and asks for an urgent transfer.</p>
+            <button type="button" onClick={startScamScenario}>Start scam scenario</button>
+          </section>
+        ) : null}
 
         <section className="bank-panel">
           <h3>Learning flow</h3>
@@ -436,7 +553,7 @@ function ReviewScreen({ account, payee, transfer, isScamTransfer, onBack, onConf
   );
 }
 
-function TokenScreen({ isScamTransfer, onCancel, onApprove }) {
+function TokenScreen({ isScamTransfer, isPracticeMode, onCancel, onApprove }) {
   return (
     <>
       <section className={`bank-token-card ${isScamTransfer ? "risky" : ""}`}>
@@ -450,7 +567,12 @@ function TokenScreen({ isScamTransfer, onCancel, onApprove }) {
       </section>
       <div className="bank-action-row">
         <button type="button" className="bank-ghost-btn" onClick={onCancel}>Cancel</button>
-        <button type="button" className={isScamTransfer ? "bank-danger-btn" : "bank-primary-btn"} onClick={onApprove}>
+        <button
+          type="button"
+          className={isScamTransfer ? "bank-danger-btn" : "bank-primary-btn"}
+          disabled={isScamTransfer && isPracticeMode}
+          onClick={onApprove}
+        >
           Approve
         </button>
       </div>

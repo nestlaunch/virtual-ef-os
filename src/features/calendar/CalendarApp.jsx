@@ -1,6 +1,8 @@
 ﻿import { useMemo, useState } from "react";
 import { monthModel } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
+import { MONTH_LABELS, parseDateWheelPartInput } from "./dateWheelInput";
+import { dateInputValue, datePartsFromValue, parseDateInput, updateDatePartValue } from "./dateUtils";
 
 function formatDateLabel(year, month, date) {
   const d = new Date(year, month, date);
@@ -61,23 +63,138 @@ function buildMonthDays(year, month) {
   });
 }
 
+function DateWheelFields({ disabled, fieldId, selected, currentYear, onChoosePart }) {
+  const [draftParts, setDraftParts] = useState({});
+  const daysInMonth = new Date(selected.year, selected.month + 1, 0).getDate();
+  const parts = [
+    { id: "date", label: "Day", display: String(selected.date).padStart(2, "0"), inputMode: "numeric", maxLength: 2 },
+    { id: "month", label: "Month", display: MONTH_LABELS[selected.month]?.short || "Month", inputMode: "text", maxLength: 9 },
+    { id: "year", label: "Year", display: String(selected.year), inputMode: "numeric", maxLength: 4 },
+  ];
+
+  function getPartKey(partId) {
+    return `${fieldId}-${partId}`;
+  }
+
+  function clearDraft(partId) {
+    const key = getPartKey(partId);
+    setDraftParts((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function parsePart(part, raw) {
+    return parseDateWheelPartInput(part.id, raw, {
+      daysInMonth,
+      minYear: currentYear - 1,
+      maxYear: currentYear + 6,
+    });
+  }
+
+  function updatePartIfValid(part, raw, target) {
+    const value = parsePart(part, raw);
+    if (value === null) {
+      return false;
+    }
+    const next = onChoosePart(part.id, value);
+    window.dispatchEvent(new CustomEvent("virtual-os-learn-step-action", {
+      detail: { eventType: "change", target, dateParts: next },
+    }));
+    window.dispatchEvent(new CustomEvent("virtual-os-guide-step-action", {
+      detail: { eventType: "change", target, dateParts: next },
+    }));
+    return true;
+  }
+
+  return (
+    <div
+      className="date-wheel-fields"
+      data-learn-target="calendar-date-wheel"
+      role="group"
+      aria-label="Edit date"
+    >
+      {parts.map((part) => {
+        const key = getPartKey(part.id);
+        return (
+          <label key={part.id} className="date-wheel-part" aria-label={part.label}>
+            <input
+              className="date-wheel-value date-wheel-input"
+              type="text"
+              inputMode={part.inputMode}
+              readOnly={disabled}
+              value={draftParts[key] ?? part.display}
+              maxLength={part.maxLength}
+              aria-label={part.label}
+              onClick={(event) => {
+                event.currentTarget.focus();
+                event.currentTarget.select();
+              }}
+              onFocus={(event) => {
+                setDraftParts((current) => ({ ...current, [key]: part.display }));
+                event.currentTarget.select();
+              }}
+              onChange={(event) => {
+                if (disabled) {
+                  return;
+                }
+                const value = event.target.value;
+                setDraftParts((current) => ({ ...current, [key]: value }));
+                updatePartIfValid(part, value, event.currentTarget);
+              }}
+              onBlur={(event) => {
+                updatePartIfValid(part, event.target.value, event.currentTarget);
+                clearDraft(part.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  updatePartIfValid(part, event.currentTarget.value, event.currentTarget);
+                  clearDraft(part.id);
+                  event.currentTarget.blur();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  clearDraft(part.id);
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CalendarApp() {
-  const { state, addEvent, updateEvent, helpers } = useVirtualOS();
-  const [displayYear, setDisplayYear] = useState(monthModel.year);
-  const [displayMonth, setDisplayMonth] = useState(monthModel.month);
+  const { state, addEvent, updateEvent, deleteEvent, helpers } = useVirtualOS();
+  const currentDate = new Date();
+  const [displayYear, setDisplayYear] = useState(currentDate.getFullYear());
+  const [displayMonth, setDisplayMonth] = useState(currentDate.getMonth());
   const [editorDate, setEditorDate] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     title: "",
     allDay: false,
+    date: "",
     start: "15:30",
     end: "16:30",
   });
+  const effectiveMode = state.session.currentUserId
+    ? state.session.userModes[state.session.currentUserId] || state.session.mode
+    : state.session.mode;
+  const isLearnMode = effectiveMode === "learn";
+  const currentUserId = state.session.currentUserId;
+  const visibleEvents = useMemo(() => (
+    state.events.filter((event) => !event.accountId || event.accountId === currentUserId)
+  ), [state.events, currentUserId]);
 
   const monthDays = useMemo(() => buildMonthDays(displayYear, displayMonth), [displayYear, displayMonth]);
 
   const eventsByKey = useMemo(() => {
-    return state.events.reduce((acc, event) => {
+    return visibleEvents.reduce((acc, event) => {
       const y = event.year ?? monthModel.year;
       const m = event.month ?? monthModel.month;
       const k = keyFor(y, m, event.date);
@@ -87,19 +204,26 @@ export function CalendarApp() {
       acc[k].push(event);
       return acc;
     }, {});
-  }, [state.events]);
+  }, [visibleEvents]);
 
   function openEditor(dayObj) {
     setEditorDate({ year: dayObj.year, month: dayObj.month, date: dayObj.date });
     setEditingId(null);
-    setForm({ title: "", allDay: false, start: "15:30", end: "16:30" });
+    setForm({ title: "", allDay: false, date: dateInputValue(dayObj), start: "15:30", end: "16:30" });
   }
 
   function loadEvent(event) {
+    const eventDate = {
+      year: event.year ?? monthModel.year,
+      month: event.month ?? monthModel.month,
+      date: event.date,
+    };
+    setEditorDate(eventDate);
     setEditingId(event.id);
     setForm({
       title: event.title,
       allDay: false,
+      date: dateInputValue(eventDate),
       start: toTimeString(event.start),
       end: toTimeString(event.end),
     });
@@ -126,44 +250,73 @@ export function CalendarApp() {
     }
     const start = toMinutes(form.start);
     const end = toMinutes(form.end);
-    if (end <= start) {
+    const parsedDate = parseDateInput(form.date);
+    if (end <= start || !parsedDate || !form.title.trim()) {
       return;
     }
+    const dt = new Date(parsedDate.year, parsedDate.month, parsedDate.date);
 
     if (editingId) {
       updateEvent(editingId, {
-        title: form.title || "Untitled",
+        title: form.title.trim(),
+        date: parsedDate.date,
+        month: parsedDate.month,
+        year: parsedDate.year,
+        day: mondayIndex(dt.getDay()),
         start,
         end,
       });
+      window.dispatchEvent(new CustomEvent("virtual-os-learn-calendar-saved", { detail: { type: "updated" } }));
     } else {
-      const dt = new Date(editorDate.year, editorDate.month, editorDate.date);
       addEvent({
         id: `cal-${Date.now()}`,
-        title: form.title || "Untitled",
-        date: editorDate.date,
-        month: editorDate.month,
-        year: editorDate.year,
+        title: form.title.trim(),
+        date: parsedDate.date,
+        month: parsedDate.month,
+        year: parsedDate.year,
         day: mondayIndex(dt.getDay()),
         start,
         end,
         source: "Calendar",
         rigid: false,
       });
+      window.dispatchEvent(new CustomEvent("virtual-os-learn-calendar-saved", { detail: { type: "created" } }));
     }
 
     setEditorDate(null);
     setEditingId(null);
   }
 
+  function removeEvent() {
+    if (!editingId) {
+      return;
+    }
+    deleteEvent(editingId);
+    setEditorDate(null);
+    setEditingId(null);
+  }
+
+  function updateDatePart(part, value) {
+    const current = datePartsFromValue(form.date, editorDate);
+    const next = updateDatePartValue(current, part, value);
+    setForm((p) => ({ ...p, date: dateInputValue(next) }));
+    setEditorDate(next);
+    setDisplayYear(next.year);
+    setDisplayMonth(next.month);
+    return next;
+  }
+
   if (editorDate !== null) {
     const dayEvents = eventsByKey[keyFor(editorDate.year, editorDate.month, editorDate.date)] || [];
+    const canEditDateAndTime = true;
+    const canSave = form.title.trim().length > 0 && parseDateInput(form.date) && toMinutes(form.end) > toMinutes(form.start);
+    const selectedDate = datePartsFromValue(form.date, editorDate);
 
     return (
       <div className="calendar-edit-screen">
         <div className="edit-top-row">
-          <button type="button" className="close-btn" onClick={() => setEditorDate(null)}>x</button>
-          <button type="button" className="save-btn" onClick={saveEvent}>Save</button>
+          <button type="button" className="close-btn" onClick={() => { setEditorDate(null); }}>x</button>
+          <button type="button" className="save-btn" disabled={!canSave} onClick={saveEvent}>Save</button>
         </div>
 
         <input
@@ -200,17 +353,57 @@ export function CalendarApp() {
               <span />
             </button>
           </div>
-          <div className="line between"><span>{formatDateLabel(editorDate.year, editorDate.month, editorDate.date)}</span><input className="time-edit" type="time" value={form.start} onChange={(e) => setForm((p) => ({ ...p, start: e.target.value }))} /></div>
-          <div className="line between"><span>{formatDateLabel(editorDate.year, editorDate.month, editorDate.date)}</span><input className="time-edit" type="time" value={form.end} onChange={(e) => setForm((p) => ({ ...p, end: e.target.value }))} /></div>
+          <div className="line between">
+            <DateWheelFields
+              disabled={!canEditDateAndTime}
+              fieldId="start-date"
+              selected={selectedDate}
+              currentYear={currentDate.getFullYear()}
+              onChoosePart={updateDatePart}
+            />
+            <input className="time-edit" type="time" value={form.start} disabled={!canEditDateAndTime} onChange={(e) => setForm((p) => ({ ...p, start: e.target.value }))} />
+          </div>
+          <div className="line between">
+            <DateWheelFields
+              disabled={!canEditDateAndTime}
+              fieldId="end-date"
+              selected={selectedDate}
+              currentYear={currentDate.getFullYear()}
+              onChoosePart={updateDatePart}
+            />
+            <input className="time-edit" type="time" value={form.end} disabled={!canEditDateAndTime} onChange={(e) => setForm((p) => ({ ...p, end: e.target.value }))} />
+          </div>
           <div className="line"><span>Singapore Standard Time</span></div>
           <div className="line"><span>Does not repeat</span></div>
         </div>
+        {editingId ? (
+          <button type="button" className="delete-event-btn" onClick={removeEvent}>
+            Delete event
+          </button>
+        ) : null}
       </div>
     );
   }
 
   const monthLabel = new Date(displayYear, displayMonth, 1).toLocaleDateString("en-US", { month: "long" });
   const weekRows = monthDays.length / 7;
+  const latestUserEvent = [...visibleEvents].reverse().find((event) => (
+    event.source === "Calendar" && !event.rigid
+  ));
+  const doctorAppointment = helpers.rigidAppointments.find((appointment) => appointment.id === "sms-doctor-main");
+  const targetDate = latestUserEvent
+    ? {
+        year: latestUserEvent.year ?? monthModel.year,
+        month: latestUserEvent.month ?? monthModel.month,
+        date: latestUserEvent.date,
+      }
+    : doctorAppointment
+      ? {
+          year: doctorAppointment.year,
+          month: doctorAppointment.month,
+          date: doctorAppointment.date,
+        }
+      : null;
 
   return (
     <div className="calendar-app">
@@ -235,13 +428,33 @@ export function CalendarApp() {
             && day.date === helpers.todayDate
             && day.month === new Date().getMonth()
             && day.year === new Date().getFullYear();
+          const isTargetDate = targetDate
+            && day.date === targetDate.date
+            && day.month === targetDate.month
+            && day.year === targetDate.year;
+          const hasTargetInMonth = targetDate && monthDays.some((item) => (
+            item.date === targetDate.date
+            && item.month === targetDate.month
+            && item.year === targetDate.year
+          ));
+          const isLearnTargetDate = isTargetDate || (!hasTargetInMonth && isToday) || (
+            day.inMonth
+            && !hasTargetInMonth
+            && !monthDays.some((item) => item.inMonth
+              && item.date === helpers.todayDate
+              && item.month === new Date().getMonth()
+              && item.year === new Date().getFullYear())
+            && day.date === 1
+          );
 
           return (
             <button
               key={`${day.date}-${day.month}-${day.year}-${idx}`}
               type="button"
               className={`day-cell ${day.inMonth ? "" : "out"} ${isToday ? "today" : ""}`}
-              onClick={() => day.inMonth && openEditor(day)}
+              data-learn-target={isLearnTargetDate ? "calendar-single-date" : undefined}
+              data-calendar-date={isTargetDate ? "target" : undefined}
+              onClick={() => openEditor(day)}
             >
               <div className="day-number">{day.date}</div>
               {dayEvents.slice(0, 2).map((event) => (

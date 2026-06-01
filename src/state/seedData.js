@@ -136,48 +136,18 @@ export const weeklyRules = [
 
 export const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+const monthModelDate = new Date();
+const monthModelDays = Array.from(
+  { length: new Date(monthModelDate.getFullYear(), monthModelDate.getMonth() + 1, 0).getDate() },
+  (_, index) => ({ date: index + 1, inMonth: true })
+);
+
 export const monthModel = {
-  monthLabel: "March",
-  month: 2,
-  year: 2026,
+  monthLabel: monthModelDate.toLocaleDateString("en-US", { month: "long" }),
+  month: monthModelDate.getMonth(),
+  year: monthModelDate.getFullYear(),
   weekHeaders: ["S", "M", "T", "W", "T", "F", "S"],
-  days: [
-    { date: 1, inMonth: true },
-    { date: 2, inMonth: true },
-    { date: 3, inMonth: true },
-    { date: 4, inMonth: true },
-    { date: 5, inMonth: true },
-    { date: 6, inMonth: true },
-    { date: 7, inMonth: true },
-    { date: 8, inMonth: true },
-    { date: 9, inMonth: true },
-    { date: 10, inMonth: true },
-    { date: 11, inMonth: true },
-    { date: 12, inMonth: true },
-    { date: 13, inMonth: true },
-    { date: 14, inMonth: true },
-    { date: 15, inMonth: true },
-    { date: 16, inMonth: true },
-    { date: 17, inMonth: true },
-    { date: 18, inMonth: true },
-    { date: 19, inMonth: true },
-    { date: 20, inMonth: true },
-    { date: 21, inMonth: true },
-    { date: 22, inMonth: true },
-    { date: 23, inMonth: true },
-    { date: 24, inMonth: true },
-    { date: 25, inMonth: true },
-    { date: 26, inMonth: true },
-    { date: 27, inMonth: true },
-    { date: 28, inMonth: true },
-    { date: 29, inMonth: true },
-    { date: 30, inMonth: true },
-    { date: 31, inMonth: true },
-    { date: 1, inMonth: false, month: "Apr" },
-    { date: 2, inMonth: false, month: "Apr" },
-    { date: 3, inMonth: false, month: "Apr" },
-    { date: 4, inMonth: false, month: "Apr" },
-  ],
+  days: monthModelDays,
 };
 
 export const initialEvents = [];
