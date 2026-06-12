@@ -65,8 +65,10 @@ export function PracticeGuidePanel() {
     if (!step || completed[step.id]) {
       return;
     }
-    const nextCompletedCount = completedCount + 1;
-    trackPracticeStep(step.id, nextCompletedCount >= allSteps.length);
+    const nextCompleted = new Set(Object.keys(completed).filter((stepId) => completed[stepId]));
+    nextCompleted.add(step.id);
+    const nextComplete = allSteps.length > 0 && allSteps.every((item) => nextCompleted.has(item.id));
+    trackPracticeStep(step.id, nextComplete);
     setAnswerValue("");
     setAnswerStatus(null);
     setHintLevel(0);
@@ -139,9 +141,14 @@ export function PracticeGuidePanel() {
 
   function requestHint() {
     const nextLevel = Math.min(hintLevel + 1, 3);
+    const promptText = activeStep?.prompts?.[Math.min(nextLevel - 1, (activeStep.prompts.length || 1) - 1)] || "";
     setPracticeSupport("prompt");
     setHintLevel(nextLevel);
-    trackPracticePrompt(nextLevel);
+    trackPracticePrompt(nextLevel, {
+      text: promptText,
+      label: activeStep?.label || "",
+      stepId: activeStep?.id || "",
+    });
   }
 
   function checkActiveStepAnswer() {
@@ -220,14 +227,6 @@ export function PracticeGuidePanel() {
               </button>
             ))}
           </div>
-          <input
-            value={answerValue}
-            onChange={(event) => {
-              setAnswerValue(event.target.value);
-              setAnswerStatus(null);
-            }}
-            placeholder="Type answer here"
-          />
           <button type="button" onClick={checkActiveStepAnswer}>Check</button>
           {answerStatus === "correct" ? <span className="correct">Correct.</span> : null}
           {answerStatus === "wrong" ? <span className="wrong">Not quite. Check the app again, then try again.</span> : null}

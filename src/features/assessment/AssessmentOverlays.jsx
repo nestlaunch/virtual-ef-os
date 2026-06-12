@@ -237,14 +237,6 @@ export function AssessmentTaskPanel() {
                   </button>
                 ))}
               </div>
-              <input
-                value={answers[check.id] || ""}
-                onChange={(event) => {
-                  setAnswers((prev) => ({ ...prev, [check.id]: event.target.value }));
-                  setAnswerStatus((prev) => ({ ...prev, [check.id]: null }));
-                }}
-                placeholder="Type answer here"
-              />
               <button type="button" onClick={() => checkAnswer(check)}>Check</button>
               {answerStatus[check.id] === "correct" ? <em className="correct">Correct</em> : null}
               {answerStatus[check.id] === "wrong" ? <em className="wrong">Not quite</em> : null}

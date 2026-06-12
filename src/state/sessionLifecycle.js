@@ -118,6 +118,7 @@ export function resetSessionForNewPin(session, options) {
     userModes: {},
     assignments: {},
     learnModules: {},
+    customStimuli: [],
     experienceRatings: {},
     startedAt,
     firstEntryAt: null,

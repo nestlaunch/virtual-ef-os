@@ -31,6 +31,10 @@ export function HomeScreen() {
           <span className="app-icon bank" aria-hidden="true">$</span>
           <span>Bank</span>
         </button>
+        <button type="button" className="home-app" data-learn-target="home-app-singpass" onClick={() => openApp("singpass")}>
+          <span className="app-icon singpass" aria-hidden="true">sp</span>
+          <span>Singpass</span>
+        </button>
         <button type="button" className="home-app" data-learn-target="home-app-settings" onClick={() => openApp("settings")}>
           <span className="app-icon settings" aria-hidden="true">⚙</span>
           <span>Settings</span>

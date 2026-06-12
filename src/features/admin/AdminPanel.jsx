@@ -3,8 +3,10 @@ import { getCurrentAssignment } from "../../state/sessionLifecycle";
 import { APP_CATALOG, CHECKLIST_ITEMS, LEARN_APP_CATALOG, SCORE_LABELS, SCENARIO_LIBRARY, SESSION_MODES, formatAlias } from "../../state/v2Assessment";
 import { formalThreads, weeklyRules, whatsappThreads } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
+import { PRACTICE_GUIDES, PRACTICE_PAGE_OVERRIDES } from "../practice/practiceGuides";
+import { buildPracticeGuide, flattenGuideSteps } from "../practice/practiceGuideUtils";
 import { getDoctorAppointmentTarget } from "../taskAnswerChecks";
-import { checkRecordCriterion, filterRecordItems, formatFunctionalStepId, getAppCompetency, getAssessmentMetric, getCognitiveReportRows, getCompletedFunctionalStepIds, getCriterionDomain, getCriterionEvidenceDetail, getDischargeRelevantIndicators, getFunctionalCompletion, getScenarioForRecord, getTaskAnswerAccuracy, percentChange } from "./recordsMetrics";
+import { checkRecordCriterion, filterRecordItems, getAppCompetency, getAssessmentMetric, getCognitiveReportRows, getCriterionDomain, getCriterionEvidenceDetail, getFunctionalCompletion, getScenarioForRecord, getTaskAnswerAccuracy, percentChange } from "./recordsMetrics";
 
 const QUICK_CUES = [
   "Read the instruction again.",
@@ -30,7 +32,7 @@ const ASSESSMENT_DOMAINS = [
   { id: "flexibility", label: "Cognitive flexibility", evidence: "Switches apps or strategy when the task requires it." },
   { id: "errors", label: "Error awareness / correction", evidence: "Detects and corrects wrong entries without direct instruction." },
   { id: "efficiency", label: "Processing efficiency", evidence: "Action intervals, task time, and excessive toggling." },
-  { id: "cueing", label: "Cueing required", evidence: "Highest prompt level needed after independent-first attempt." },
+  { id: "cueing", label: "Cueing required", evidence: "Specific therapist prompts needed after independent-first attempt." },
 ];
 
 function statusFrom(ok, mixed = false) {
@@ -318,6 +320,7 @@ function MiniInterfacePreview({ app, mode, selected }) {
       {current === "calendar" ? <><strong>Calendar</strong><div className="mini-calendar-grid">{Array.from({ length: 21 }).map((_, i) => <span key={i} className={i === 8 ? "marked" : ""} />)}</div></> : null}
       {current === "maps" ? <><strong>Maps</strong><div className="mini-route" /><span className="mini-pin one" /><span className="mini-pin two" /></> : null}
       {current === "bank" ? <><strong>Practice Bank</strong><p>Total balance</p><span className="mini-warning">Scam check</span></> : null}
+      {current === "singpass" ? <><strong>Singpass</strong><p>Digital IC</p><p>Approval request</p><span className="mini-warning">Review details</span></> : null}
       {current === "instructions" || current === "settings" ? <><strong>{current === "settings" ? "Settings" : "Instructions"}</strong><p>Waiting for task</p></> : null}
       <div className="mini-nav" />
     </div>
@@ -355,6 +358,8 @@ export function AdminPanel() {
     pushScenario,
     pushAssessment,
     pushAssessmentPrompt,
+    pushCustomStimulus,
+    removeCustomStimulus,
     trackAssessmentStuck,
     setPracticeSupport,
     scoreChecklistItem,
@@ -373,6 +378,10 @@ export function AdminPanel() {
   const [learnAppId, setLearnAppId] = useState(LEARN_APP_CATALOG[0].id);
   const [scenarioId, setScenarioId] = useState(SCENARIO_LIBRARY[0]?.id || "");
   const [assessmentScenarioId, setAssessmentScenarioId] = useState(SCENARIO_LIBRARY.find((scenario) => scenario.complexity === "Multi-app")?.id || SCENARIO_LIBRARY[0]?.id || "");
+  const [freeStimulusApp, setFreeStimulusApp] = useState("whatsapp");
+  const [freeStimulusTitle, setFreeStimulusTitle] = useState("Jia Wei");
+  const [freeStimulusMessage, setFreeStimulusMessage] = useState("Can we meet later today?");
+  const [freeStimulusEncouragement, setFreeStimulusEncouragement] = useState("Open the message and respond naturally.");
   const [newAlias, setNewAlias] = useState("");
   const [newPin, setNewPin] = useState("");
   const [modeConfirmText, setModeConfirmText] = useState("");
@@ -433,6 +442,19 @@ export function AdminPanel() {
     if (!assessmentScenarioId) return;
     pushAssessment(assessmentScenarioId, targetUserId);
     openApp("home");
+  }
+
+  function pushFreeStimulus() {
+    if (!freeStimulusMessage.trim()) return;
+    pushCustomStimulus({
+      app: freeStimulusApp,
+      targetId: targetUserId,
+      title: freeStimulusTitle,
+      message: freeStimulusMessage,
+      preview: freeStimulusMessage,
+      instructions: freeStimulusEncouragement,
+    });
+    openApp(freeStimulusApp === "sms" ? "sms" : "whatsapp");
   }
 
   useEffect(() => {
@@ -582,6 +604,17 @@ export function AdminPanel() {
               assessmentScenarioId={assessmentScenarioId}
               setAssessmentScenarioId={setAssessmentScenarioId}
               pushAssessmentScenario={pushAssessmentScenario}
+              freeStimulusApp={freeStimulusApp}
+              setFreeStimulusApp={setFreeStimulusApp}
+              freeStimulusTitle={freeStimulusTitle}
+              setFreeStimulusTitle={setFreeStimulusTitle}
+              freeStimulusMessage={freeStimulusMessage}
+              setFreeStimulusMessage={setFreeStimulusMessage}
+              freeStimulusEncouragement={freeStimulusEncouragement}
+              setFreeStimulusEncouragement={setFreeStimulusEncouragement}
+              pushFreeStimulus={pushFreeStimulus}
+              state={state}
+              removeCustomStimulus={removeCustomStimulus}
             />
 
             <EvaluationPanel
@@ -597,6 +630,7 @@ export function AdminPanel() {
               openApp={openApp}
               setPracticeSupport={setPracticeSupport}
               pushAssessmentPrompt={pushAssessmentPrompt}
+              removeCustomStimulus={removeCustomStimulus}
             />
           </>
         )}
@@ -621,6 +655,13 @@ function ModeInterface({ mode }) {
 }
 
 function AccountSettings({ state, newAlias, newPin, setNewAlias, setNewPin, submitAccount, removeUserAccount }) {
+  function confirmRemoveAccount(account) {
+    const label = formatAlias(account.alias);
+    if (window.confirm(`Delete ${label} and all saved progress records for this profile? This cannot be undone.`)) {
+      removeUserAccount(account.id);
+    }
+  }
+
   return (
     <section className="admin-section">
       <h3>De-identified User Accounts</h3>
@@ -628,7 +669,9 @@ function AccountSettings({ state, newAlias, newPin, setNewAlias, setNewPin, subm
         {state.session.userAccounts.map((account) => (
           <div key={account.id}>
             <span><strong>{formatAlias(account.alias)}</strong><em>PIN {account.pin}</em></span>
-            <button type="button" onClick={() => window.confirm(`Remove ${formatAlias(account.alias)} from this session?`) && removeUserAccount(account.id)}>Remove</button>
+            <button type="button" className="account-delete-btn" aria-label={`Delete ${formatAlias(account.alias)} data`} onClick={() => confirmRemoveAccount(account)}>
+              <span aria-hidden="true">🗑</span>
+            </button>
           </div>
         ))}
       </div>
@@ -655,6 +698,17 @@ function ModeAwareSettingsPanel({
   assessmentScenarioId,
   setAssessmentScenarioId,
   pushAssessmentScenario,
+  freeStimulusApp,
+  setFreeStimulusApp,
+  freeStimulusTitle,
+  setFreeStimulusTitle,
+  freeStimulusMessage,
+  setFreeStimulusMessage,
+  freeStimulusEncouragement,
+  setFreeStimulusEncouragement,
+  pushFreeStimulus,
+  state,
+  removeCustomStimulus,
 }) {
   if (mode === "learn") {
     return (
@@ -693,9 +747,103 @@ function ModeAwareSettingsPanel({
     );
   }
   return (
-    <section className="admin-section learn-module-panel">
+    <FreeModeControls
+      targetUserId={targetUserId}
+      setTargetUserId={setTargetUserId}
+      userAccounts={userAccounts}
+      freeStimulusApp={freeStimulusApp}
+      setFreeStimulusApp={setFreeStimulusApp}
+      freeStimulusTitle={freeStimulusTitle}
+      setFreeStimulusTitle={setFreeStimulusTitle}
+      freeStimulusMessage={freeStimulusMessage}
+      setFreeStimulusMessage={setFreeStimulusMessage}
+      freeStimulusEncouragement={freeStimulusEncouragement}
+      setFreeStimulusEncouragement={setFreeStimulusEncouragement}
+      pushFreeStimulus={pushFreeStimulus}
+      state={state}
+      removeCustomStimulus={removeCustomStimulus}
+    />
+  );
+}
+
+function FreeModeControls({
+  targetUserId,
+  setTargetUserId,
+  userAccounts,
+  freeStimulusApp,
+  setFreeStimulusApp,
+  freeStimulusTitle,
+  setFreeStimulusTitle,
+  freeStimulusMessage,
+  setFreeStimulusMessage,
+  freeStimulusEncouragement,
+  setFreeStimulusEncouragement,
+  pushFreeStimulus,
+  state,
+  removeCustomStimulus,
+}) {
+  const freeStimuli = state?.session?.customStimuli || [];
+  return (
+    <section className="admin-section learn-module-panel free-stimulus-panel">
       <h3>Free Mode Settings</h3>
-      <p className="admin-muted">Free mode is unrestricted exploration. No structured task is pushed.</p>
+      <p className="admin-muted">Use Free mode for unstructured exploration. Admin can push a custom SMS or WhatsApp message without Practice checklist, Assessment scoring, or Learn guidance.</p>
+      <div className="push-grid free-push-grid">
+        <label>
+          <span>App</span>
+          <select value={freeStimulusApp} onChange={(event) => setFreeStimulusApp(event.target.value)}>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="sms">SMS</option>
+          </select>
+        </label>
+        <label>
+          <span>Target</span>
+          <select value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}>
+            <option value="all">All users</option>
+            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatAlias(account.alias)}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Sender / title</span>
+          <input value={freeStimulusTitle} onChange={(event) => setFreeStimulusTitle(event.target.value)} placeholder="e.g. Jia Wei, Doctor, Bank" />
+        </label>
+      </div>
+      <label className="free-message-field">
+        <span>Message</span>
+        <textarea value={freeStimulusMessage} onChange={(event) => setFreeStimulusMessage(event.target.value)} rows={3} placeholder="Type the custom message that should appear." />
+      </label>
+      <label className="free-message-field">
+        <span>Task card instructions</span>
+        <textarea value={freeStimulusEncouragement} onChange={(event) => setFreeStimulusEncouragement(event.target.value)} rows={3} placeholder="Instructions shown beside the phone in Free mode" />
+      </label>
+      <button type="button" className="admin-primary" onClick={pushFreeStimulus}>Push Custom Message</button>
+      <div className="learn-guide-card">
+        <strong>Free mode behaviour</strong>
+        <span>No checklist, Learn highlight, or Assessment scoring overlay is shown.</span>
+        <p>The pushed item appears as a normal thread inside the selected app and a side task card with your custom instructions.</p>
+      </div>
+      <div className="free-input-manager">
+        <strong>Pushed Inputs</strong>
+        {freeStimuli.length === 0 ? (
+          <p className="admin-muted">No custom FREE inputs have been pushed yet.</p>
+        ) : (
+          freeStimuli.map((stimulus) => (
+            <div key={stimulus.id} className="free-input-row">
+              <span>{stimulus.app === "sms" ? "SMS" : "WhatsApp"}</span>
+              <div>
+                <strong>{stimulus.title}</strong>
+                <p>{stimulus.preview || stimulus.message}</p>
+                <em>{targetLabelForStimulus(state, stimulus)} - {formatDate(stimulus.pushedAt)}</em>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.confirm(`Remove "${stimulus.title}" from FREE mode?`) && removeCustomStimulus(stimulus.id)}
+              >
+                Remove
+              </button>
+            </div>
+          ))
+        )}
+      </div>
     </section>
   );
 }
@@ -844,7 +992,107 @@ function getActiveScenarioForAccount(state, accountId) {
   return SCENARIO_LIBRARY.find((scenario) => scenario.id === assignment.scenarioId) || null;
 }
 
-function EvaluationPanel({ state, selectedAccount, setPracticeSupport, pushAssessmentPrompt }) {
+function getScenarioGuideSteps(scenario) {
+  if (!scenario) return [];
+  const firstApp = scenario.apps?.[0];
+  const guide = buildPracticeGuide(scenario, firstApp ? PRACTICE_GUIDES[firstApp] : null, PRACTICE_PAGE_OVERRIDES);
+  return flattenGuideSteps(guide);
+}
+
+function targetAccountsForStimulus(state, stimulus) {
+  if (!stimulus) return [];
+  if (!stimulus.targetId || stimulus.targetId === "all") {
+    const joinedIds = new Set(state.session.participants.filter((participant) => participant.role === "patient").map((participant) => participant.accountId));
+    return state.session.userAccounts.filter((account) => joinedIds.has(account.id));
+  }
+  return state.session.userAccounts.filter((account) => account.id === stimulus.targetId);
+}
+
+function targetLabelForStimulus(state, stimulus) {
+  if (!stimulus?.targetId || stimulus.targetId === "all") {
+    return "All joined users";
+  }
+  const account = state.session.userAccounts.find((item) => item.id === stimulus.targetId);
+  return account ? formatAlias(account.alias) : "Removed user";
+}
+
+function getFreeMonitorRows(state, selectedAccount = null) {
+  const logs = state.hiddenLog || [];
+  return (state.session.customStimuli || [])
+    .filter((stimulus) => !selectedAccount || !stimulus.targetId || stimulus.targetId === "all" || stimulus.targetId === selectedAccount.id)
+    .map((stimulus) => {
+      const targets = selectedAccount ? [selectedAccount] : targetAccountsForStimulus(state, stimulus);
+      const targetIds = targets.map((account) => account.id);
+      const relevantLogs = logs.filter((entry) => (
+        (!targetIds.length || targetIds.includes(entry.accountId))
+        && (!stimulus.pushedAt || entry.at >= stimulus.pushedAt)
+      ));
+      const readCount = targets.filter((account) => logs.some((entry) => entry.kind === "stimulus_read" && entry.stimulusId === stimulus.id && entry.accountId === account.id)).length;
+      const appOpenCount = targets.filter((account) => relevantLogs.some((entry) => entry.kind === "open_app" && entry.app === stimulus.app && entry.accountId === account.id)).length;
+      const replyCount = stimulus.app === "whatsapp"
+        ? relevantLogs.filter((entry) => entry.kind === "wa_reply" && entry.threadId === stimulus.threadId).length
+        : 0;
+      const lastAction = relevantLogs.at(-1);
+      return {
+        stimulus,
+        targets,
+        readCount,
+        appOpenCount,
+        replyCount,
+        lastAction,
+      };
+    });
+}
+
+function FreeMonitoringPanel({ state, selectedAccount, removeCustomStimulus }) {
+  const rows = getFreeMonitorRows(state, selectedAccount);
+  return (
+    <section className="admin-section practice-control-panel free-monitor-panel">
+      <h3>Free Mode Monitoring</h3>
+      <p className="admin-muted">
+        {selectedAccount
+          ? `Monitoring custom FREE inputs for ${formatAlias(selectedAccount.alias)}.`
+          : "Select a live user to filter monitoring, or review all pushed FREE inputs below."}
+      </p>
+      {rows.length === 0 ? (
+        <div className="practice-admin-block">
+          <p className="admin-muted">No active custom FREE input for this view.</p>
+        </div>
+      ) : (
+        <div className="free-monitor-list">
+          {rows.map(({ stimulus, targets, readCount, appOpenCount, replyCount, lastAction }) => (
+            <article key={stimulus.id} className="free-monitor-card">
+              <header>
+                <span>{stimulus.app === "sms" ? "SMS" : "WhatsApp"}</span>
+                <button
+                  type="button"
+                  onClick={() => window.confirm(`Remove "${stimulus.title}" from FREE mode?`) && removeCustomStimulus(stimulus.id)}
+                >
+                  Remove
+                </button>
+              </header>
+              <strong>{stimulus.title}</strong>
+              <p>{stimulus.preview || stimulus.message}</p>
+              {stimulus.instructions ? <em>{stimulus.instructions}</em> : null}
+              <div className="free-monitor-stats">
+                <div><span>Target</span><strong>{selectedAccount ? formatAlias(selectedAccount.alias) : targetLabelForStimulus(state, stimulus)}</strong></div>
+                <div><span>Read</span><strong>{readCount}/{Math.max(1, targets.length)}</strong></div>
+                <div><span>Opened app</span><strong>{appOpenCount}/{Math.max(1, targets.length)}</strong></div>
+                <div><span>Replies</span><strong>{stimulus.app === "whatsapp" ? replyCount : "N/A"}</strong></div>
+              </div>
+              <footer>
+                <span>Sent {formatDate(stimulus.pushedAt)}</span>
+                <span>Last action: {lastAction ? `${lastAction.kind} at ${formatDate(lastAction.at)}` : "None yet"}</span>
+              </footer>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EvaluationPanel({ state, selectedAccount, setPracticeSupport, pushAssessmentPrompt, removeCustomStimulus }) {
   const selectedMode = getAccountMode(state, selectedAccount);
   if (selectedMode === "practice") {
     return <PracticeControlPanel state={state} selectedAccount={selectedAccount} setPracticeSupport={setPracticeSupport} />;
@@ -853,12 +1101,7 @@ function EvaluationPanel({ state, selectedAccount, setPracticeSupport, pushAsses
     return <AssessmentControlPanel state={state} selectedAccount={selectedAccount} pushAssessmentPrompt={pushAssessmentPrompt} />;
   }
   if (selectedMode === "free") {
-    return (
-      <section className="admin-section practice-control-panel">
-        <h3>Free Mode Monitoring</h3>
-        <p className="admin-muted">Free mode has no task scoring. Monitor app use and spontaneous exploration from the live device panel.</p>
-      </section>
-    );
+    return <FreeMonitoringPanel state={state} selectedAccount={selectedAccount} removeCustomStimulus={removeCustomStimulus} />;
   }
 
   const accountId = selectedAccount?.id || state.session.currentUserId;
@@ -912,6 +1155,11 @@ function PracticeControlPanel({ state, selectedAccount, setPracticeSupport }) {
   const startedAt = metrics.startedAt || activeScenario?.pushedAt;
   const elapsed = startedAt ? (metrics.completedAt || Date.now()) - startedAt : null;
   const completedSteps = metrics.completedSteps || [];
+  const completedStepSet = new Set(completedSteps);
+  const guideSteps = getScenarioGuideSteps(activeScenario);
+  const checklist = buildAssessmentChecklist(state, activeScenario, accountId);
+  const completedChecklist = checklist.filter((item) => item.done).length;
+  const latestPrompt = getLatestPromptText(metrics);
   const supportLabel = metrics.supportMode === "checklist" ? "Checklist visible" : "Checklist hidden / prompts";
   const status = !activeScenario ? "No scenario pushed" : metrics.completedAt ? "Completed" : completedSteps.length > 0 ? "In progress" : "Not started";
 
@@ -945,10 +1193,47 @@ function PracticeControlPanel({ state, selectedAccount, setPracticeSupport }) {
         <div><span>Support</span><strong>{supportLabel}</strong></div>
         <div><span>Attempt</span><strong>{metrics.attempt || 1}</strong></div>
         <div><span>Time</span><strong>{elapsed === null ? "-" : formatDuration(elapsed)}</strong></div>
-        <div><span>Steps completed</span><strong>{completedSteps.length}</strong></div>
+        <div><span>Steps completed</span><strong>{guideSteps.length ? `${completedSteps.length}/${guideSteps.length}` : completedSteps.length}</strong></div>
         <div><span>Prompts</span><strong>{metrics.promptCount || 0}</strong></div>
-        <div><span>Highest prompt</span><strong>{metrics.highestPromptLevel || 0}</strong></div>
+        <div><span>Latest prompt</span><strong>{latestPrompt || "None used"}</strong></div>
         <div><span>Wrong-step attempts</span><strong>{metrics.wrongStepAttempts || 0}</strong></div>
+      </div>
+
+      <div className="practice-admin-block">
+        <h4>Live Checklist Capture</h4>
+        {guideSteps.length === 0 ? (
+          <p className="admin-muted">Push a Practice scenario to see live task-step detection.</p>
+        ) : (
+          <div className="assessment-checklist-capture">
+            {guideSteps.map((step) => (
+              <div key={step.id} className={completedStepSet.has(step.id) ? "done" : ""}>
+                <span>{completedStepSet.has(step.id) ? "OK" : ""}</span>
+                <strong>{step.label}</strong>
+                <em>{completedStepSet.has(step.id) ? "Detected live" : "Awaiting correct action"}</em>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="practice-admin-block">
+        <h4>Live Scenario Outcome Capture</h4>
+        {checklist.length === 0 ? (
+          <p className="admin-muted">Push a Practice scenario to see objective scenario outcomes.</p>
+        ) : (
+          <>
+            <p className="admin-muted">{completedChecklist}/{checklist.length} required scenario outcomes detected in real time.</p>
+            <div className="assessment-checklist-capture">
+              {checklist.map((item) => (
+                <div key={item.criterion} className={item.done ? "done" : ""}>
+                  <span>{item.done ? "OK" : ""}</span>
+                  <strong>{item.criterion}</strong>
+                  <em>{item.evidence}</em>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="practice-admin-block">
@@ -979,6 +1264,13 @@ function hasOpenedApp(state, app, accountId = null) {
     (!accountId || !entry.accountId || entry.accountId === accountId)
     && entry.kind === "open_app"
     && entry.app === app
+  ));
+}
+
+function hasLogKind(state, kind, accountId = null) {
+  return state.hiddenLog.some((entry) => (
+    (!accountId || !entry.accountId || entry.accountId === accountId)
+    && entry.kind === kind
   ));
 }
 
@@ -1031,11 +1323,12 @@ function checkAssessmentCriterion(state, criterion, accountId = null) {
   if (c.includes("open calendar")) return { done: hasOpenedApp(state, "calendar", accountId), evidence: "Calendar opened" };
   if (c.includes("open maps")) return { done: hasOpenedApp(state, "maps", accountId), evidence: "Maps opened" };
   if (c.includes("open bank")) return { done: hasOpenedApp(state, "bank", accountId), evidence: "Bank opened" };
+  if (c.includes("open singpass")) return { done: hasOpenedApp(state, "singpass", accountId), evidence: "Singpass opened" };
   if (c.includes("open family")) return { done: hasClickTarget(state, "family", accountId) || hasOpenedApp(state, "whatsapp", accountId), evidence: "Family/WhatsApp opened" };
   if (c.includes("doctor") || c.includes("read doctor") || c.includes("identify")) {
     return { done: hasClickTarget(state, "sms-doctor", accountId) || hasClickTarget(state, "doctor", accountId) || hasPsychiatryCalendarEntry(state, accountId), evidence: "Doctor appointment information accessed or used" };
   }
-  if (c.includes("psychiatry") || c.includes("save appointment") || /\bset\s+\d{1,2}\s+[a-z]{3}/i.test(c) || c.includes("set 3:00")) {
+  if (c.includes("psychiatry") || c.includes("save appointment") || c.includes("save event") || /\bset\s+\d{1,2}\s+[a-z]{3}/i.test(c) || c.includes("set 3:00")) {
     return { done: hasPsychiatryCalendarEntry(state, accountId), evidence: "Matching psychiatry calendar entry found" };
   }
   if (c.includes("dinner") && c.includes("calendar")) {
@@ -1052,6 +1345,18 @@ function checkAssessmentCriterion(state, criterion, accountId = null) {
         && (text(entry.target).includes("directions") || text(entry.target).includes("route"))
       )),
       evidence: "Maps route interaction detected",
+    };
+  }
+  if (c.includes("match recipient") || c.includes("match singpass")) {
+    return {
+      done: hasOpenedApp(state, "singpass", accountId) && (hasLogKind(state, "assessment_answer", accountId) || hasLogKind(state, "practice_answer", accountId)),
+      evidence: "Singpass matching answer checked",
+    };
+  }
+  if (c.includes("approve payment in singpass")) {
+    return {
+      done: hasLogKind(state, "singpass_approved", accountId),
+      evidence: hasLogKind(state, "singpass_approved", accountId) ? "Singpass approval detected" : "Awaiting Singpass approval",
     };
   }
   if (c.includes("balance") || c.includes("hougang") || c.includes("payment") || c.includes("approve")) {
@@ -1072,6 +1377,23 @@ function buildAssessmentChecklist(state, scenario, accountId = null) {
     criterion,
     ...checkAssessmentCriterion(state, criterion, accountId),
   }));
+}
+
+function getPromptItems(metrics = {}) {
+  return (metrics.promptHistory || []).map((prompt) => ({
+    id: prompt.id || `${prompt.at || ""}-${prompt.level || ""}-${prompt.text || ""}`,
+    at: prompt.at,
+    app: prompt.app || "current app",
+    stepId: prompt.stepId || "",
+    label: prompt.label || "",
+    text: prompt.text || `Prompt level ${prompt.level || 1} recorded`,
+    respondedAt: prompt.respondedAt,
+    responseMs: prompt.responseMs,
+  }));
+}
+
+function getLatestPromptText(metrics = {}) {
+  return getPromptItems(metrics)[0]?.text || "";
 }
 
 function summarizeCriteriaByDomain(checklist) {
@@ -1095,6 +1417,7 @@ function buildFunctionalCognitionTracking(state, metrics, checklist, elapsed, ac
   const completionRatio = total > 0 ? completed / total : 0;
   const avgInterval = average(metrics.actionIntervalsMs || []);
   const promptLevel = metrics.highestPromptLevel || 0;
+  const latestPrompt = getLatestPromptText(metrics);
   const stuckCount = metrics.stuckAlerts?.length || 0;
   const domainSummary = summarizeCriteriaByDomain(checklist);
   const accountLogs = getAccountLogs(state, accountId);
@@ -1135,8 +1458,8 @@ function buildFunctionalCognitionTracking(state, metrics, checklist, elapsed, ac
     },
     {
       label: "Cueing required",
-      status: promptLevel === 0 ? "Independent so far" : `Level ${promptLevel}`,
-      evidence: promptLevel === 0 ? "No therapist prompt used." : `${metrics.promptHistory?.length || 0} prompt${metrics.promptHistory?.length === 1 ? "" : "s"} pushed; highest level ${promptLevel}.`,
+      status: promptLevel === 0 ? "Independent so far" : "Prompt used",
+      evidence: promptLevel === 0 ? "No therapist prompt used." : latestPrompt || `${metrics.promptHistory?.length || 0} prompt${metrics.promptHistory?.length === 1 ? "" : "s"} pushed.`,
     },
   ];
   Object.entries(domainSummary).forEach(([label, summary]) => {
@@ -1160,8 +1483,11 @@ function AssessmentControlPanel({ state, selectedAccount, pushAssessmentPrompt }
   const latestAlert = metrics.stuckAlerts?.[0];
   const promptHistory = metrics.promptHistory || [];
   const promptResponseAverage = average(metrics.promptResponseTimesMs || []);
+  const latestPrompt = getLatestPromptText(metrics);
   const checklist = buildAssessmentChecklist(state, activeScenario, accountId);
   const completedChecklist = checklist.filter((item) => item.done).length;
+  const observedSteps = getScenarioGuideSteps(activeScenario);
+  const observedStepSet = new Set(metrics.completedSteps || []);
   const cognitionRows = buildFunctionalCognitionTracking(state, metrics, checklist, elapsed, accountId);
 
   function pushPrompt(prompt) {
@@ -1197,7 +1523,27 @@ function AssessmentControlPanel({ state, selectedAccount, pushAssessmentPrompt }
       </div>
 
       <div className="practice-admin-block">
-        <h4>Assessment Checklist Capture</h4>
+        <h4>Live Task-Step Capture</h4>
+        {observedSteps.length === 0 ? (
+          <p className="admin-muted">Push an Assessment scenario to see app-level steps detected live.</p>
+        ) : (
+          <>
+            <p className="admin-muted">{observedSteps.filter((step) => observedStepSet.has(step.id)).length}/{observedSteps.length} app steps detected.</p>
+            <div className="assessment-checklist-capture">
+              {observedSteps.map((step) => (
+                <div key={step.id} className={observedStepSet.has(step.id) ? "done" : ""}>
+                  <span>{observedStepSet.has(step.id) ? "OK" : ""}</span>
+                  <strong>{step.label}</strong>
+                  <em>{observedStepSet.has(step.id) ? "Detected live" : "Awaiting evidence"}</em>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="practice-admin-block">
+        <h4>Scenario Outcome Capture</h4>
         {checklist.length === 0 ? (
           <p className="admin-muted">Push an Assessment scenario to capture task-level completion.</p>
         ) : (
@@ -1223,7 +1569,7 @@ function AssessmentControlPanel({ state, selectedAccount, pushAssessmentPrompt }
         <div><span>Taps</span><strong>{metrics.tapCount || 0}</strong></div>
         <div><span>Avg between actions</span><strong>{formatDuration(averageActionInterval)}</strong></div>
         <div><span>Stuck pings</span><strong>{metrics.stuckAlerts?.length || 0}</strong></div>
-        <div><span>Highest prompt</span><strong>{metrics.highestPromptLevel || 0}</strong></div>
+        <div><span>Latest prompt</span><strong>{latestPrompt || "None used"}</strong></div>
         <div><span>Prompt response avg</span><strong>{formatDuration(promptResponseAverage)}</strong></div>
       </div>
 
@@ -1440,8 +1786,102 @@ function LiveActivityEvidence({ state, averageTypingLatency, selectedAccount }) 
   );
 }
 
+function appMatchesRecord(item, appId) {
+  if (appId === "all") return true;
+  const app = APP_CATALOG.find((entry) => entry.id === appId);
+  const aliases = [appId, app?.currentApp].filter(Boolean);
+  return aliases.some((alias) => (item.apps || []).includes(alias));
+}
+
+function filterRecordsForDashboard(items, filters) {
+  return filterRecordItems(items, { ...filters, app: "all" }).filter((item) => appMatchesRecord(item, filters.app));
+}
+
+function averageNumber(values) {
+  const numeric = values.filter((value) => typeof value === "number");
+  return numeric.length ? numeric.reduce((sum, value) => sum + value, 0) / numeric.length : null;
+}
+
+function pctFromCounts(done, total) {
+  return total > 0 ? Math.round((done / total) * 100) : null;
+}
+
+function getFilteredModes(items) {
+  return ["learn", "practice", "assessment", "free"].reduce((acc, mode) => {
+    acc[mode] = items.filter((item) => item.mode === mode);
+    return acc;
+  }, {});
+}
+
+function getTimelineSummary(items) {
+  const latest = items[0];
+  const first = items.at(-1);
+  const latestCompletion = latest ? getFunctionalCompletion(latest) : null;
+  const firstCompletion = first ? getFunctionalCompletion(first) : null;
+  const latestAccuracy = latest ? getTaskAnswerAccuracy(latest) : null;
+  const latestInitiation = latest ? getAssessmentMetric(latest, "timeToFirstActionMs") : null;
+  const latestInterval = latest ? getAssessmentMetric(latest, "avgActionInterval") : null;
+  const latestPrompt = latest ? [
+    ...getPromptItems(latest.assessmentMetrics || {}),
+    ...getPromptItems(latest.practiceMetrics || {}),
+  ].sort((a, b) => (b.at || 0) - (a.at || 0))[0]?.text || "" : "";
+  return {
+    latest,
+    first,
+    latestCompletion,
+    firstCompletion,
+    latestAccuracy,
+    latestInitiation,
+    latestInterval,
+    latestPrompt,
+    completionChange: percentChange(firstCompletion?.pct, latestCompletion?.pct),
+    initiationChange: percentChange(first ? getAssessmentMetric(first, "timeToFirstActionMs") : null, latestInitiation, true),
+  };
+}
+
+function getLearnDashboardSummary(items) {
+  const latestLearn = items.find((item) => item.mode === "learn")?.learnMetrics;
+  const attempts = latestLearn?.attempts || { correct: 0, total: 0 };
+  return {
+    modulesCompleted: latestLearn?.modulesCompleted || 0,
+    totalTimeMs: Object.values(latestLearn?.timeByAppMs || {}).reduce((sum, value) => sum + (value || 0), 0),
+    accuracy: attempts.total ? Math.round((attempts.correct / attempts.total) * 100) : null,
+    byApp: APP_CATALOG.map((app) => {
+      const appAttempts = latestLearn?.byApp?.[app.currentApp] || latestLearn?.byApp?.[app.id] || { correct: 0, total: 0 };
+      const completed = latestLearn?.completedByApp?.[app.currentApp] || latestLearn?.completedByApp?.[app.id] || 0;
+      const timeMs = latestLearn?.timeByAppMs?.[app.currentApp] || latestLearn?.timeByAppMs?.[app.id] || 0;
+      return {
+        app,
+        completed,
+        timeMs,
+        accuracy: appAttempts.total ? Math.round((appAttempts.correct / appAttempts.total) * 100) : null,
+      };
+    }),
+  };
+}
+
+function getModeCompletionSummary(items) {
+  const completions = items.map((item) => getFunctionalCompletion(item)).filter(Boolean);
+  const done = completions.reduce((sum, item) => sum + item.done, 0);
+  const total = completions.reduce((sum, item) => sum + item.total, 0);
+  return {
+    sessions: items.length,
+    pct: pctFromCounts(done, total),
+    done,
+    total,
+    avgInitiation: averageNumber(items.map((item) => getAssessmentMetric(item, "timeToFirstActionMs"))),
+    avgInterval: averageNumber(items.map((item) => getAssessmentMetric(item, "avgActionInterval"))),
+    promptSupport: [...new Set(items.flatMap((item) => [
+      ...getPromptItems(item.assessmentMetrics || {}),
+      ...getPromptItems(item.practiceMetrics || {}),
+    ].map((prompt) => prompt.text)).filter(Boolean))],
+    stuckAlerts: items.reduce((sum, item) => sum + (getAssessmentMetric(item, "stuckAlerts") || 0), 0),
+  };
+}
+
 function PastRecords({ records }) {
   const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [activeReportTab, setActiveReportTab] = useState("overview");
   const [expandedSessionId, setExpandedSessionId] = useState("");
   const [filters, setFilters] = useState({ mode: "all", app: "all", scenario: "all" });
   const progressByAccount = records.flatMap((record) => record.participants || []).reduce((acc, item) => {
@@ -1452,142 +1892,282 @@ function PastRecords({ records }) {
   const allItems = Object.values(progressByAccount).flat();
   const scenarios = [...new Map(allItems.filter((item) => item.scenarioId).map((item) => [item.scenarioId, item.scenarioTitle || item.scenarioId])).entries()];
   const accountTimelines = Object.entries(progressByAccount)
-    .map(([accountId, items]) => ({ accountId, items: filterRecordItems([...items].sort((a, b) => b.completedAt - a.completedAt), filters) }))
+    .map(([accountId, items]) => ({
+      accountId,
+      allItems: [...items].sort((a, b) => b.completedAt - a.completedAt),
+      items: filterRecordsForDashboard([...items].sort((a, b) => b.completedAt - a.completedAt), filters),
+    }))
     .filter((entry) => entry.items.length > 0);
   const selectedTimeline = accountTimelines.find((entry) => entry.accountId === selectedAccountId) || accountTimelines[0] || null;
   const selectedItems = selectedTimeline?.items || [];
-  const latest = selectedItems[0];
-  const first = selectedItems.at(-1);
-  const latestCompletion = latest ? getFunctionalCompletion(latest) : null;
-  const firstCompletion = first ? getFunctionalCompletion(first) : null;
-  const latestAnswerAccuracy = latest ? getTaskAnswerAccuracy(latest) : null;
-  const latestInitiation = latest ? getAssessmentMetric(latest, "timeToFirstActionMs") : null;
-  const cognitiveRows = latest ? getCognitiveReportRows(latest, first || latest) : [];
-  const dischargeIndicators = getDischargeRelevantIndicators(selectedItems);
+  const selectedSummary = getTimelineSummary(selectedItems);
+  const modeItems = getFilteredModes(selectedItems);
+  const learnSummary = getLearnDashboardSummary(selectedItems);
+  const practiceSummary = getModeCompletionSummary(modeItems.practice);
+  const assessmentSummary = getModeCompletionSummary(modeItems.assessment);
+  const latestAlias = selectedSummary.latest?.alias || selectedItems[0]?.alias || "";
+
   return (
-    <section className="admin-section records-list report-card-records">
-      <h3>Past Sessions: Patient Progress</h3>
-      <div className="record-filter-row">
-        <label><span>Mode</span><select value={filters.mode} onChange={(event) => setFilters((prev) => ({ ...prev, mode: event.target.value }))}><option value="all">All modes</option><option value="learn">Learn</option><option value="practice">Practice</option><option value="assessment">Assessment</option><option value="free">Free</option></select></label>
-        <label><span>App</span><select value={filters.app} onChange={(event) => setFilters((prev) => ({ ...prev, app: event.target.value }))}><option value="all">All apps</option>{APP_CATALOG.map((app) => <option key={app.id} value={app.id}>{app.label}</option>)}</select></label>
-        <label><span>Scenario</span><select value={filters.scenario} onChange={(event) => setFilters((prev) => ({ ...prev, scenario: event.target.value }))}><option value="all">All scenarios</option>{scenarios.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label>
+    <section className="admin-section past-dashboard">
+      <div className="past-dashboard-header">
+        <div>
+          <span>Past sessions</span>
+          <h3>Progress report cards</h3>
+          <p>Select a de-identified profile, then review functional and cognitive outcomes without the live device view.</p>
+        </div>
+        <div className="past-filter-row">
+          <label><span>Mode</span><select value={filters.mode} onChange={(event) => { setFilters((prev) => ({ ...prev, mode: event.target.value })); setExpandedSessionId(""); }}><option value="all">All modes</option><option value="learn">Learn</option><option value="practice">Practice</option><option value="assessment">Assessment</option><option value="free">Free</option></select></label>
+          <label><span>App</span><select value={filters.app} onChange={(event) => { setFilters((prev) => ({ ...prev, app: event.target.value })); setExpandedSessionId(""); }}><option value="all">All apps</option>{APP_CATALOG.map((app) => <option key={app.id} value={app.id}>{app.label}</option>)}</select></label>
+          <label><span>Scenario</span><select value={filters.scenario} onChange={(event) => { setFilters((prev) => ({ ...prev, scenario: event.target.value })); setExpandedSessionId(""); }}><option value="all">All scenarios</option>{scenarios.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label>
+        </div>
       </div>
+
       {accountTimelines.length === 0 ? <p className="admin-muted">No matching progress records yet.</p> : (
         <>
-          <div className="patient-report-tiles">
-            {accountTimelines.map(({ accountId, items }) => {
-              const item = items[0];
-              const completion = getFunctionalCompletion(item);
-              const initiation = getAssessmentMetric(item, "timeToFirstActionMs");
-              const promptLevel = getAssessmentMetric(item, "highestPromptLevel");
+          <div className="profile-tile-grid" aria-label="Profiles with saved progress">
+            {accountTimelines.map(({ accountId, items, allItems: timelineItems }) => {
+              const summary = getTimelineSummary(items);
+              const modeCounts = getFilteredModes(timelineItems);
               return (
-                <button key={accountId} type="button" className={selectedTimeline?.accountId === accountId ? "selected" : ""} onClick={() => { setSelectedAccountId(accountId); setExpandedSessionId(""); }}>
-                  <strong>{formatAlias(item.alias)}</strong>
-                  <span>{items.length} matching session{items.length === 1 ? "" : "s"}</span>
-                  <em>Latest: {item.mode}{item.attempt ? ` attempt ${item.attempt}` : ""} | {formatDate(item.completedAt)}</em>
-                  <p>Functional completion <b>{completion ? `${completion.pct}%` : "-"}</b></p>
-                  <p>Initiation <b>{formatDuration(initiation)}</b></p>
-                  <p>Prompt level <b>{promptLevel || 0}</b></p>
+                <button key={accountId} type="button" className={`profile-tile ${selectedTimeline?.accountId === accountId ? "selected" : ""}`} onClick={() => { setSelectedAccountId(accountId); setExpandedSessionId(""); }}>
+                  <span className="profile-tile-kicker">Profile</span>
+                  <strong>{formatAlias(summary.latest?.alias || items[0]?.alias)}</strong>
+                  <em>{items.length} matching attempt{items.length === 1 ? "" : "s"}</em>
+                  <div className="profile-tile-stats">
+                    <span><b>{summary.latestCompletion ? `${summary.latestCompletion.pct}%` : "-"}</b> latest steps</span>
+                    <span><b>{formatDuration(summary.latestInitiation)}</b> initiation</span>
+                  </div>
+                  <small>Learn {modeCounts.learn.length} | Practice {modeCounts.practice.length} | Assessment {modeCounts.assessment.length}</small>
                 </button>
               );
             })}
           </div>
 
-          {latest ? (
-            <div className="patient-report-detail">
-              <section className="report-panel functional">
-                <h4>Functional Performance</h4>
-                <div className="report-metric-grid">
-                  <div><span>Latest task completion</span><strong>{latestCompletion ? `${latestCompletion.done}/${latestCompletion.total}` : "-"}</strong><em>{latestCompletion ? `${latestCompletion.pct}%` : "-"}</em></div>
-                  <div><span>Change from first</span><strong>{percentChange(firstCompletion?.pct, latestCompletion?.pct)}</strong><em>Filtered sessions</em></div>
-                  <div><span>Information answer accuracy</span><strong>{latestAnswerAccuracy ? `${latestAnswerAccuracy.correct}/${latestAnswerAccuracy.attempts}` : "-"}</strong><em>{latestAnswerAccuracy ? `${latestAnswerAccuracy.pct}%` : "No checked answers"}</em></div>
+          {selectedSummary.latest ? (
+            <div className="profile-report-shell">
+              <div className="profile-report-head">
+                <div>
+                  <span>Selected profile</span>
+                  <h3>{formatAlias(latestAlias)}</h3>
+                  <p>Latest saved attempt: {selectedSummary.latest.mode} | {formatDate(selectedSummary.latest.completedAt)}</p>
                 </div>
-                <div className="app-competency-list">
-                  {APP_CATALOG.map((app) => {
-                    const score = getAppCompetency(selectedItems, app.id);
-                    return <div key={app.id}><span>{app.label}</span><strong>{score === null ? "No data" : `${score}% steps detected`}</strong></div>;
-                  })}
-                </div>
-                <div className="session-completion-list">
-                  <b>Scenario completion</b>
-                  {selectedItems.map((item) => {
-                    const completion = getFunctionalCompletion(item);
-                    return <span key={item.id}>{item.scenarioTitle}: <strong>{completion ? `${completion.done}/${completion.total} (${completion.pct}%)` : "-"}</strong></span>;
-                  })}
-                </div>
-                <div className="discharge-indicator-list">
-                  <b>Discharge-relevant indicators</b>
-                  {dischargeIndicators.map((indicator) => (
-                    <div key={indicator.label} className={indicator.met === true ? "met" : indicator.met === false ? "not-met" : "neutral"}>
-                      <span>{indicator.met === true ? "Observed" : indicator.met === false ? "Monitor" : "No data"}</span>
-                      <strong>{indicator.label}: {indicator.value}</strong>
-                      <em>{indicator.evidence}</em>
-                    </div>
+                <div className="report-tab-row">
+                  {["overview", "learn", "practice", "assessment", "attempts"].map((tab) => (
+                    <button key={tab} type="button" className={activeReportTab === tab ? "active" : ""} onClick={() => { setActiveReportTab(tab); setExpandedSessionId(""); }}>
+                      {tab}
+                    </button>
                   ))}
                 </div>
-              </section>
+              </div>
 
-              <section className="report-panel cognitive">
-                <h4>Cognitive Performance</h4>
-                <div className="cognitive-report-list">
-                  {cognitiveRows.map((row) => (
-                    <div key={row.label}>
-                      <span>{row.label}</span>
-                      <strong>{row.format === "duration" ? formatDuration(row.display) : row.display}</strong>
-                      <em>{row.change} | {row.evidence}</em>
+              {activeReportTab === "overview" ? (
+                <div className="report-card-two-panel">
+                  <section className="report-summary-panel">
+                    <div className="report-panel-title">
+                      <span>Functional performance</span>
+                      <h4>What the patient can do</h4>
                     </div>
-                  ))}
+                    <div className="report-kpi-grid">
+                      <div><span>Latest step completion</span><strong>{selectedSummary.latestCompletion ? `${selectedSummary.latestCompletion.done}/${selectedSummary.latestCompletion.total}` : "-"}</strong><em>{selectedSummary.latestCompletion ? `${selectedSummary.latestCompletion.pct}% detected` : "No checklist data"}</em></div>
+                      <div><span>Change across attempts</span><strong>{selectedSummary.completionChange}</strong><em>Filtered records only</em></div>
+                      <div><span>Information accuracy</span><strong>{selectedSummary.latestAccuracy ? `${selectedSummary.latestAccuracy.correct}/${selectedSummary.latestAccuracy.attempts}` : "-"}</strong><em>{selectedSummary.latestAccuracy ? `${selectedSummary.latestAccuracy.pct}% correct` : "No answer card used"}</em></div>
+                    </div>
+                    <div className="app-ability-list">
+                      {APP_CATALOG.map((app) => {
+                        const score = getAppCompetency(selectedItems, app.id) ?? getAppCompetency(selectedItems, app.currentApp);
+                        return (
+                          <div key={app.id}>
+                            <span>{app.label}</span>
+                            <div><i style={{ width: `${score || 0}%` }} /></div>
+                            <strong>{score === null ? "No data" : `${score}%`}</strong>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="report-summary-panel">
+                    <div className="report-panel-title">
+                      <span>Cognitive performance</span>
+                      <h4>How the patient performs</h4>
+                    </div>
+                    <div className="report-kpi-grid">
+                      <div><span>Initiation</span><strong>{formatDuration(selectedSummary.latestInitiation)}</strong><em>{selectedSummary.initiationChange}</em></div>
+                      <div><span>Average between taps</span><strong>{formatDuration(selectedSummary.latestInterval)}</strong><em>Processing efficiency</em></div>
+                      <div><span>Prompt support</span><strong>{selectedSummary.latestPrompt || "None used"}</strong><em>Latest recorded cue</em></div>
+                    </div>
+                    <div className="cognition-row-list">
+                      {getCognitiveReportRows(selectedSummary.latest, selectedSummary.first || selectedSummary.latest).slice(0, 6).map((row) => (
+                        <div key={row.label}>
+                          <strong>{row.label}</strong>
+                          <span>{row.format === "duration" ? formatDuration(row.display) : row.display}</span>
+                          <em>{row.change}</em>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 </div>
-              </section>
+              ) : null}
+
+              {activeReportTab === "learn" ? (
+                <ModeReportPanel
+                  title="Learn outcomes"
+                  subtitle="Lower-level teaching metrics: modules completed, time on task, and accuracy of guided clicks or answers."
+                  metrics={[
+                    ["Modules completed", learnSummary.modulesCompleted],
+                    ["Time spent", formatDuration(learnSummary.totalTimeMs)],
+                    ["Accuracy", learnSummary.accuracy === null ? "-" : `${learnSummary.accuracy}%`],
+                  ]}
+                >
+                  <div className="mode-table-list">
+                    {learnSummary.byApp.map(({ app, completed, timeMs, accuracy }) => (
+                      <div key={app.id}>
+                        <strong>{app.label}</strong>
+                        <span>{completed} module{completed === 1 ? "" : "s"} completed</span>
+                        <span>{formatDuration(timeMs)}</span>
+                        <span>{accuracy === null ? "No attempts" : `${accuracy}% accurate`}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ModeReportPanel>
+              ) : null}
+
+              {activeReportTab === "practice" ? (
+                <ModeReportPanel
+                  title="Practice outcomes"
+                  subtitle="Checklist-supported task practice, including completion and prompt fading readiness."
+                  metrics={[
+                    ["Attempts", practiceSummary.sessions],
+                    ["Checklist completion", practiceSummary.pct === null ? "-" : `${practiceSummary.done}/${practiceSummary.total} (${practiceSummary.pct}%)`],
+                    ["Average initiation", formatDuration(practiceSummary.avgInitiation)],
+                    ["Prompts used", practiceSummary.promptSupport.length ? `${practiceSummary.promptSupport.length} cue type${practiceSummary.promptSupport.length === 1 ? "" : "s"}` : "None"],
+                  ]}
+                >
+                  <AttemptRows items={modeItems.practice} expandedSessionId={expandedSessionId} setExpandedSessionId={setExpandedSessionId} />
+                </ModeReportPanel>
+              ) : null}
+
+              {activeReportTab === "assessment" ? (
+                <ModeReportPanel
+                  title="Assessment outcomes"
+                  subtitle="Independent performance with objective evidence of initiation, progress, stuck periods, and completed steps."
+                  metrics={[
+                    ["Attempts", assessmentSummary.sessions],
+                    ["Objective completion", assessmentSummary.pct === null ? "-" : `${assessmentSummary.done}/${assessmentSummary.total} (${assessmentSummary.pct}%)`],
+                    ["Average initiation", formatDuration(assessmentSummary.avgInitiation)],
+                    ["Stuck alerts", assessmentSummary.stuckAlerts],
+                  ]}
+                >
+                  <AttemptRows items={modeItems.assessment} expandedSessionId={expandedSessionId} setExpandedSessionId={setExpandedSessionId} />
+                </ModeReportPanel>
+              ) : null}
+
+              {activeReportTab === "attempts" ? (
+                <ModeReportPanel
+                  title="Individual session data"
+                  subtitle="Open a single attempt to see the exact steps detected, missing criteria, prompt level, and timing."
+                  metrics={[
+                    ["Filtered attempts", selectedItems.length],
+                    ["Modes included", [...new Set(selectedItems.map((item) => item.mode))].join(", ") || "-"],
+                    ["Apps included", [...new Set(selectedItems.flatMap((item) => item.apps || []))].join(", ") || "-"],
+                  ]}
+                >
+                  <AttemptRows items={selectedItems} expandedSessionId={expandedSessionId} setExpandedSessionId={setExpandedSessionId} showMode />
+                </ModeReportPanel>
+              ) : null}
             </div>
           ) : null}
-
-          <div className="individual-session-list">
-            <h4>Individual Session Data</h4>
-            {selectedItems.map((item) => {
-              const completion = getFunctionalCompletion(item);
-              const scenario = getScenarioForRecord(item);
-              const expanded = expandedSessionId === item.id;
-              return (
-                <article key={item.id}>
-                  <button type="button" onClick={() => setExpandedSessionId(expanded ? "" : item.id)}>
-                    <strong>{formatDate(item.completedAt)} | {item.mode}{item.attempt ? ` attempt ${item.attempt}` : ""}</strong>
-                    <span>{item.scenarioTitle}</span>
-                    <em>{completion ? `${completion.done}/${completion.total} steps detected (${completion.pct}%)` : "No checklist available"}</em>
-                  </button>
-                  {expanded ? (
-                    <div className="session-detail-drawer">
-                      <div className="assessment-checklist-capture">
-                        {(scenario.successCriteria || []).map((criterion) => {
-                          const done = checkRecordCriterion(item, criterion);
-                          return <div key={criterion} className={done ? "done" : ""}><span>{done ? "OK" : ""}</span><strong>{criterion}</strong><em>{getCriterionEvidenceDetail(item, criterion)}</em></div>;
-                        })}
-                      </div>
-                      <div className="assessment-checklist-capture">
-                        <b>Observed functional step trace</b>
-                        {getCompletedFunctionalStepIds(item).length > 0 ? getCompletedFunctionalStepIds(item).map((stepId) => (
-                          <div key={stepId} className="done"><span>OK</span><strong>{formatFunctionalStepId(stepId)}</strong><em>Captured from practice or assessment interaction evidence.</em></div>
-                        )) : <div><span></span><strong>No step trace captured</strong><em>Use scenario criteria and raw metrics above for interpretation.</em></div>}
-                      </div>
-                      <div className="report-metric-grid">
-                        <div><span>Time to first action</span><strong>{formatDuration(getAssessmentMetric(item, "timeToFirstActionMs"))}</strong></div>
-                        <div><span>Avg action interval</span><strong>{formatDuration(getAssessmentMetric(item, "avgActionInterval"))}</strong></div>
-                        <div><span>Highest prompt</span><strong>{getAssessmentMetric(item, "highestPromptLevel") || 0}</strong></div>
-                        <div><span>Stuck alerts</span><strong>{getAssessmentMetric(item, "stuckAlerts") || 0}</strong></div>
-                        <div><span>Context switches</span><strong>{item.metrics?.contextSwitches ?? "-"}</strong></div>
-                        <div><span>Recent apps button</span><strong>{item.metrics?.recentPresses ?? "-"}</strong></div>
-                        <div><span>Answer accuracy</span><strong>{getTaskAnswerAccuracy(item) ? `${getTaskAnswerAccuracy(item).correct}/${getTaskAnswerAccuracy(item).attempts}` : "-"}</strong></div>
-                        <div><span>Calendar entries</span><strong>{item.taskEvidence?.calendar?.manualEntries ?? 0}</strong></div>
-                        <div><span>Experience rating</span><strong>{item.experienceRating ? `${item.experienceRating}/5` : "-"}</strong></div>
-                      </div>
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
         </>
       )}
     </section>
+  );
+}
+
+function ModeReportPanel({ title, subtitle, metrics, children }) {
+  return (
+    <section className="mode-report-panel">
+      <div className="report-panel-title">
+        <span>Report card</span>
+        <h4>{title}</h4>
+        <p>{subtitle}</p>
+      </div>
+      <div className="report-kpi-grid compact">
+        {metrics.map(([label, value]) => (
+          <div key={label}><span>{label}</span><strong>{value}</strong></div>
+        ))}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function AttemptRows({ items, expandedSessionId, setExpandedSessionId, showMode = false }) {
+  if (items.length === 0) {
+    return <p className="admin-muted">No saved attempts for this view.</p>;
+  }
+  return (
+    <div className="attempt-row-list">
+      {items.map((item) => {
+        const completion = getFunctionalCompletion(item);
+        const scenario = getScenarioForRecord(item);
+        const expanded = expandedSessionId === item.id;
+        return (
+          <article key={item.id}>
+            <button type="button" onClick={() => setExpandedSessionId(expanded ? "" : item.id)}>
+              <span>{formatDate(item.completedAt)}</span>
+              <strong>{showMode ? `${item.mode}: ` : ""}{item.scenarioTitle || scenario.title}</strong>
+              <em>{completion ? `${completion.done}/${completion.total} steps (${completion.pct}%)` : "No checklist data"}{item.attempt ? ` | attempt ${item.attempt}` : ""}</em>
+            </button>
+            {expanded ? <AttemptDetail item={item} scenario={scenario} /> : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function AttemptDetail({ item, scenario }) {
+  const answerAccuracy = getTaskAnswerAccuracy(item);
+  const criteria = scenario.successCriteria || [];
+  const promptItems = [
+    ...getPromptItems(item.assessmentMetrics || {}),
+    ...getPromptItems(item.practiceMetrics || {}),
+  ].sort((a, b) => (b.at || 0) - (a.at || 0));
+  return (
+    <div className="attempt-detail-panel">
+      <div className="attempt-metric-strip">
+        <div><span>First action</span><strong>{formatDuration(getAssessmentMetric(item, "timeToFirstActionMs"))}</strong></div>
+        <div><span>Avg action interval</span><strong>{formatDuration(getAssessmentMetric(item, "avgActionInterval"))}</strong></div>
+        <div><span>Prompt support</span><strong>{promptItems[0]?.text || "None used"}</strong></div>
+        <div><span>Stuck alerts</span><strong>{getAssessmentMetric(item, "stuckAlerts") || 0}</strong></div>
+        <div><span>Answer accuracy</span><strong>{answerAccuracy ? `${answerAccuracy.correct}/${answerAccuracy.attempts}` : "-"}</strong></div>
+      </div>
+
+      <div className="attempt-evidence-grid">
+        <section>
+          <h5>Required scenario steps</h5>
+          {criteria.length === 0 ? <p className="admin-muted">No scenario checklist attached.</p> : criteria.map((criterion) => {
+            const done = checkRecordCriterion(item, criterion);
+            return (
+              <div key={criterion} className={done ? "done" : ""}>
+                <span>{done ? "OK" : ""}</span>
+                <strong>{criterion}</strong>
+                <em>{getCriterionDomain(criterion)} | {getCriterionEvidenceDetail(item, criterion)}</em>
+              </div>
+            );
+          })}
+        </section>
+        <section>
+          <h5>Prompt support used</h5>
+          {promptItems.length === 0 ? <p className="admin-muted">No therapist prompt was recorded for this attempt.</p> : promptItems.map((prompt) => (
+            <div key={prompt.id} className="prompt-used">
+              <span></span>
+              <strong>{prompt.text}</strong>
+              <em>{prompt.label ? `${prompt.label} | ` : ""}{prompt.app}{prompt.responseMs ? ` | responded in ${formatDuration(prompt.responseMs)}` : ""}</em>
+            </div>
+          ))}
+        </section>
+      </div>
+    </div>
   );
 }

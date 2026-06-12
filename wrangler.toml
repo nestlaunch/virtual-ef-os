@@ -15,7 +15,7 @@ ALLOWED_ORIGINS = ""
 binding = "DB"
 database_name = "daily-digital-db"
 # Replace after running: npx wrangler d1 create daily-digital-db
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "f2be7300-f5c9-4fa6-8621-326f6b32a73b"
 migrations_dir = "migrations"
 
 [[durable_objects.bindings]]

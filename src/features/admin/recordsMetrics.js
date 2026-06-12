@@ -121,11 +121,13 @@ export function checkRecordCriterion(item, criterion) {
   if (c === "whatsapp") return recordOpenedApp(item, "whatsapp");
   if (c === "maps") return recordOpenedApp(item, "maps");
   if (c === "bank") return recordOpenedApp(item, "bank");
+  if (c === "singpass") return recordOpenedApp(item, "singpass");
   if (c === "home") return recordOpenedApp(item, "home") || getRecordActions(item).some((entry) => entry.kind === "go_home");
   if (c.includes("open messages")) return recordOpenedApp(item, "sms");
   if (c.includes("open calendar")) return recordOpenedApp(item, "calendar");
   if (c.includes("open maps")) return recordOpenedApp(item, "maps");
   if (c.includes("open bank")) return recordOpenedApp(item, "bank");
+  if (c.includes("open singpass")) return recordOpenedApp(item, "singpass");
   if (c.includes("open family")) return recordOpenedApp(item, "whatsapp") || recordClicked(item, "family");
   if (c.includes("doctor") || c.includes("read doctor") || c.includes("read appointment") || c.includes("appointment message") || c.includes("identify")) {
     const answerIds = getTaskAnswerIds("appointmentDetails");
@@ -143,6 +145,7 @@ export function checkRecordCriterion(item, criterion) {
     c.includes("calendar")
     || c.includes("psychiatry")
     || c.includes("save appointment")
+    || c.includes("save event")
     || /\b(set|select)\s+\d{1,2}\s+[a-z]{3}\s+\d{4}/i.test(c)
   ) return (evidence.calendar?.manualEntries || 0) > 0 || (evidence.calendar?.scheduledFromMessages || 0) > 0;
   if (c.includes("reply") || c.includes("send")) return (evidence.whatsapp?.totalReplies || 0) > 0;
@@ -169,6 +172,12 @@ export function checkRecordCriterion(item, criterion) {
     const answerChecked = hasTaskAnswerEvidenceForIds(item, answerIds);
     const answerCorrect = recordAnsweredTaskItem(item, answerIds);
     if (answerChecked) return answerCorrect;
+  }
+  if (c.includes("match recipient") || c.includes("match singpass")) {
+    return recordOpenedApp(item, "singpass") && hasTaskAnswerEvidenceForIds(item, getTaskAnswerIds("paymentDetails"));
+  }
+  if (c.includes("approve payment in singpass")) {
+    return getRecordActions(item).some((entry) => entry.kind === "singpass_approved");
   }
   if (c.includes("balance") || c.includes("hougang") || c.includes("amount") || c.includes("purpose") || c.includes("payment") || c.includes("pay") || c.includes("approve") || c.includes("review")) {
     return recordOpenedApp(item, "bank") && getRecordActions(item).some((entry) => {
@@ -201,6 +210,9 @@ export function getCriterionEvidenceDetail(item, criterion) {
   if (c === "bank" || c.includes("open bank")) {
     return recordOpenedApp(item, "bank") ? "Bank app opened" : "Bank app not opened";
   }
+  if (c === "singpass" || c.includes("open singpass")) {
+    return recordOpenedApp(item, "singpass") ? "Singpass app opened" : "Singpass app not opened";
+  }
 
   if (c.includes("doctor") || c.includes("read doctor") || c.includes("read appointment") || c.includes("appointment message") || c.includes("identify")) {
     return summarizeAnswerEvidence(item, getTaskAnswerIds("appointmentDetails"))
@@ -226,10 +238,20 @@ export function getCriterionEvidenceDetail(item, criterion) {
         ? "Payment review/confirm action detected"
         : "Payment details not confirmed");
   }
+  if (c.includes("match recipient") || c.includes("match singpass")) {
+    return summarizeAnswerEvidence(item, getTaskAnswerIds("paymentDetails"))
+      || (recordOpenedApp(item, "singpass") ? "Singpass details viewed" : "Singpass request not opened");
+  }
+  if (c.includes("approve payment in singpass")) {
+    return getRecordActions(item).some((entry) => entry.kind === "singpass_approved")
+      ? "Singpass approval detected"
+      : "Singpass approval not detected";
+  }
   if (
     c.includes("calendar")
     || c.includes("psychiatry")
     || c.includes("save appointment")
+    || c.includes("save event")
     || /\b(set|select)\s+\d{1,2}\s+[a-z]{3}\s+\d{4}/i.test(c)
   ) {
     const manual = evidence.calendar?.manualEntries || 0;
@@ -318,6 +340,16 @@ function pct(done, total) {
   return total > 0 ? Math.round((done / total) * 100) : null;
 }
 
+function latestPromptText(item) {
+  const prompts = [
+    ...(item.assessmentMetrics?.promptHistory || []),
+    ...(item.practiceMetrics?.promptHistory || []),
+  ].sort((a, b) => (b.at || 0) - (a.at || 0));
+  const latest = prompts[0];
+  if (!latest) return "No therapist prompt used.";
+  return latest.text || latest.label || `Prompt level ${latest.level || 1} recorded`;
+}
+
 export function getCognitiveReportRows(latest, first = latest) {
   const latestCompletion = getFunctionalCompletion(latest);
   const firstCompletion = getFunctionalCompletion(first);
@@ -366,9 +398,9 @@ export function getCognitiveReportRows(latest, first = latest) {
     {
       label: "Cueing required",
       value: promptLevel,
-      display: promptLevel,
+      display: promptLevel === 0 ? "No prompt used" : latestPromptText(latest),
       change: percentChange(getAssessmentMetric(first, "highestPromptLevel") || 0, promptLevel, true),
-      evidence: "Highest therapist prompt level used during the task.",
+      evidence: "Specific therapist prompt used during the task.",
       format: "text",
     },
     {
@@ -450,8 +482,8 @@ export function getDischargeRelevantIndicators(items = []) {
     {
       label: "Cueing burden",
       met: latestPromptLevel <= 1,
-      value: `Prompt level ${latestPromptLevel}`,
-      evidence: "Lower prompt level suggests the task can be completed with less therapist support.",
+      value: latestPromptLevel === 0 ? "No prompt used" : latestPromptText(latest),
+      evidence: "Specific prompt support recorded during the task.",
     },
     {
       label: "Initiation",

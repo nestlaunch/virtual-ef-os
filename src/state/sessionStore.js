@@ -227,6 +227,20 @@ function mergeMaxNumberMaps(current = {}, previous = {}) {
   }, {});
 }
 
+function filterRemovedRecords(records = [], removedAccountIds = new Set()) {
+  return (records || [])
+    .map((record) => {
+      if (!Array.isArray(record.participants)) {
+        return record;
+      }
+      return {
+        ...record,
+        participants: filterRemovedAccountItems(record.participants, removedAccountIds),
+      };
+    })
+    .filter((record) => !Array.isArray(record.participants) || record.participants.length > 0);
+}
+
 export function mergeLiveStateSnapshot(currentSnapshot, previousSnapshot) {
   if (!previousSnapshot?.session || previousSnapshot.session.pin !== currentSnapshot?.session?.pin) {
     return currentSnapshot;
@@ -250,7 +264,10 @@ export function mergeLiveStateSnapshot(currentSnapshot, previousSnapshot) {
         removedAccountIds,
       ),
       customScenarios: mergeUniqueBy(previousSnapshot.session.customScenarios || [], currentSnapshot.session.customScenarios || [], (item) => item.id),
-      records: mergeUniqueBy(previousSnapshot.session.records || [], currentSnapshot.session.records || [], (item) => item.id || `${item.assignmentId}-${item.completedAt}`),
+      records: filterRemovedRecords(
+        mergeUniqueBy(previousSnapshot.session.records || [], currentSnapshot.session.records || [], (item) => item.id || `${item.assignmentId}-${item.completedAt}`),
+        removedAccountIds,
+      ),
       assignments: filterRemovedAccountMap(mergedAssignments, removedAccountIds),
       userModes: filterRemovedAccountMap(mergeAccountMap(currentSnapshot.session.userModes || {}, previousSnapshot.session.userModes || {}), removedAccountIds),
       learnModules: filterRemovedAccountMap(mergeAccountMap(currentSnapshot.session.learnModules || {}, previousSnapshot.session.learnModules || {}), removedAccountIds),

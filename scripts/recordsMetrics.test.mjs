@@ -127,6 +127,20 @@ const bankPaymentInfoRecord = {
   },
 };
 
+const bankSingpassCompleteRecord = {
+  ...bankPaymentInfoRecord,
+  apps: ["bank", "singpass"],
+  taskEvidence: {
+    ...bankPaymentInfoRecord.taskEvidence,
+    recentActions: [
+      ...bankPaymentInfoRecord.taskEvidence.recentActions,
+      { kind: "open_app", app: "singpass" },
+      { kind: "practice_answer", stepId: "match-singpass-details", correct: true },
+      { kind: "singpass_approved", payee: "Hougang Polyclinic", amount: "25.00" },
+    ],
+  },
+};
+
 const bankWrongPaymentInfoRecord = {
   ...bankRecord,
   taskEvidence: {
@@ -261,7 +275,11 @@ assert.deepEqual(getFunctionalCompletion(mapsRecord), { done: 4, total: 4, pct: 
 assert.equal(checkRecordCriterion(bankRecord, "Choose Hougang Polyclinic"), true);
 assert.equal(checkRecordCriterion(bankRecord, "Enter amount: 25.00"), true);
 assert.equal(checkRecordCriterion(bankRecord, "Review and approve payment"), true);
-assert.equal(getFunctionalCompletion(bankRecord).pct, 100);
+assert.equal(getFunctionalCompletion(bankRecord).pct, 57);
+assert.equal(checkRecordCriterion(bankSingpassCompleteRecord, "Open Singpass"), true);
+assert.equal(checkRecordCriterion(bankSingpassCompleteRecord, "Match recipient and amount"), true);
+assert.equal(checkRecordCriterion(bankSingpassCompleteRecord, "Approve payment in Singpass"), true);
+assert.equal(getFunctionalCompletion(bankSingpassCompleteRecord).pct, 100);
 assert.equal(checkRecordCriterion(bankInfoRecord, "Check total balance: S$2262.60"), true);
 assert.equal(checkRecordCriterion(bankWrongInfoRecord, "Check total balance: S$2262.60"), false);
 assert.equal(checkRecordCriterion(bankPaymentInfoRecord, "Review before approving"), true);
@@ -965,6 +983,7 @@ assert.deepEqual(resetSessionForNewPin({
   records: [{ id: "record-1" }],
   userAccounts: [{ id: "user-a" }],
   customScenarios: [{ id: "custom-1" }],
+  customStimuli: [],
 });
 assert.deepEqual(resolvePushTargets({
   participants: [
@@ -1163,13 +1182,14 @@ const stimulusState = {
     currentUserId: "user-a",
     readStimuli: [],
     dismissedStimuli: [],
-    assignments: { "user-a": [{ id: "assign-stim", pushedAt: 10000 }] },
+    userModes: { "user-a": "practice" },
+    assignments: { "user-a": [{ id: "assign-stim", mode: "practice", scenarioId: "single-whatsapp-reply", pushedAt: 10000 }] },
   },
 };
 assert.deepEqual(getVisibleThreadIdsForState("whatsapp", stimulusState, 18000), []);
 assert.deepEqual(getVisibleThreadIdsForState("whatsapp", stimulusState, 20000), ["jia-wei"]);
 assert.equal(getLatestUnreadStimulus(stimulusState, 20000).id, "wa-jia-wei");
-assert.equal(getWhatsAppStorageKey(stimulusState.session), `${WHATSAPP_STORAGE_PREFIX}:user-a:free-session-1000`);
+assert.equal(getWhatsAppStorageKey(stimulusState.session), `${WHATSAPP_STORAGE_PREFIX}:user-a:assign-stim`);
 assert.equal(getWhatsAppStorageKey({
   ...stimulusState.session,
   userModes: { "user-a": "practice" },

@@ -5,3 +5,5 @@ dist/
 .chrome-profile/
 dev-server*.log
 dev-server*.err
+vite-dev*.log
+Reference/

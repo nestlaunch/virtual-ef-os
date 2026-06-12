@@ -2,7 +2,7 @@
 import { whatsappThreads } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { analyzeWhatsAppTurn } from "../../services/geminiClient";
-import { findStimulus, getVisibleThreadIdsForState } from "../../state/stimulusSequence";
+import { findStimulusForState, getCustomStimuliForApp, getVisibleThreadIdsForState } from "../../state/stimulusSequence";
 import { getCurrentAssignment } from "../../state/sessionLifecycle";
 import { clearWhatsAppStorage, getWhatsAppStorageKey } from "./whatsappSession";
 
@@ -22,6 +22,24 @@ function deepCloneThreads() {
     unreadMessages: thread.unreadMessages,
     jiaFollowUpSent: false,
   }));
+}
+
+function groupCustomStimuli(stimuli) {
+  const groups = new Map();
+  stimuli.forEach((stimulus) => {
+    const existing = groups.get(stimulus.threadId) || {
+      id: stimulus.threadId,
+      sender: stimulus.title,
+      timeLabel: "Now",
+      unreadMessages: 0,
+      messages: [],
+      custom: true,
+    };
+    existing.unreadMessages += 1;
+    existing.messages.unshift({ id: `${stimulus.id}-msg`, mine: false, text: stimulus.message || stimulus.preview });
+    groups.set(stimulus.threadId, existing);
+  });
+  return [...groups.values()];
 }
 
 function loadPersistedThreads(storageKey) {
@@ -136,9 +154,24 @@ export function WhatsAppApp() {
   const pendingTimersRef = useRef([]);
 
   const visibleIds = getVisibleThreadIdsForState("whatsapp", state);
+  const customThreads = groupCustomStimuli(getCustomStimuliForApp(state, "whatsapp"));
+  const customThreadIds = new Set(customThreads.map((thread) => thread.id));
+  const baseVisibleThreads = threads.filter((thread) => visibleIds.includes(thread.id) && !customThreadIds.has(thread.id));
+  const mergedCustomThreads = customThreads.map((thread) => {
+    const localThread = threads.find((item) => item.id === thread.id);
+    const localReplies = (localThread?.messages || []).filter((message) => message.mine);
+    return {
+      ...thread,
+      messages: [...thread.messages, ...localReplies],
+      unreadMessages: localThread?.unreadMessages ?? thread.unreadMessages,
+    };
+  });
   const visibleThreads = isWhatsAppLearn
     ? threads.filter((thread) => ["jia-wei", "nadiah", "family"].includes(thread.id))
-    : threads.filter((thread) => visibleIds.includes(thread.id));
+    : [
+      ...baseVisibleThreads,
+      ...mergedCustomThreads,
+    ];
   const active = useMemo(() => visibleThreads.find((t) => t.id === activeId), [visibleThreads, activeId]);
   const activeUserReplyCount = active?.messages.filter((message) => message.mine).length || 0;
   const conversationLimitReached = activeUserReplyCount >= MAX_USER_REPLIES_PER_THREAD;
@@ -154,6 +187,40 @@ export function WhatsAppApp() {
       // Ignore storage write failures so chat flow still works.
     }
   }, [storageKey, threads]);
+
+  useEffect(() => {
+    if (customThreads.length === 0) {
+      return;
+    }
+    setThreads((prev) => {
+      let changed = false;
+      const next = prev.map((thread) => {
+        const custom = customThreads.find((item) => item.id === thread.id);
+        if (!custom) {
+          return thread;
+        }
+        const existingIds = new Set(thread.messages.map((message) => message.id));
+        const newMessages = custom.messages.filter((message) => !existingIds.has(message.id));
+        if (newMessages.length === 0) {
+          return thread;
+        }
+        changed = true;
+        return {
+          ...thread,
+          sender: custom.sender,
+          timeLabel: custom.timeLabel,
+          custom: true,
+          unreadMessages: thread.unreadMessages + newMessages.length,
+          messages: [...thread.messages, ...newMessages],
+        };
+      });
+      const missing = customThreads.filter((thread) => !next.some((item) => item.id === thread.id));
+      if (missing.length) {
+        changed = true;
+      }
+      return changed ? [...missing, ...next] : prev;
+    });
+  }, [state.session.customStimuli]);
 
   useEffect(() => {
     return () => {
@@ -226,7 +293,7 @@ export function WhatsAppApp() {
   }
 
   function openThread(threadId) {
-    const stimulus = findStimulus("whatsapp", threadId);
+    const stimulus = findStimulusForState("whatsapp", threadId, state);
     if (stimulus) {
       markStimulusRead(stimulus.id);
     }
@@ -261,7 +328,7 @@ export function WhatsAppApp() {
     }
 
     const threadId = activeId;
-    const activeThreadSnapshot = threads.find((t) => t.id === threadId);
+    const activeThreadSnapshot = visibleThreads.find((t) => t.id === threadId);
     if (!activeThreadSnapshot) {
       return;
     }

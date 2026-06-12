@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useEffect, useMemo, useReducer } from "react";
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from "react";
 import { formalThreads, initialEvents, calendarMeta } from "./seedData";
 import { APP_CATALOG, SCENARIO_LIBRARY, createInitialChecklistScores } from "./v2Assessment";
 import { createDeviceId, createParticipantPin, createSessionPin, liveStateStorageKey, loadLocalDeviceState, loadStoredLiveState, loadStoredSession, saveLocalDeviceState, saveStoredLiveState, saveStoredSession } from "./sessionStore";
@@ -7,6 +7,7 @@ import { applyLearnModuleAssignment, applyModeSelection, applyScenarioAssignment
 import { baseLearnMetrics, mergeLearnAccountMetrics, mergeLearnMetrics, updateLearnAccuracy } from "./learnMetrics";
 import { appendParticipantProgressRecord, createTaskEvidenceSnapshot, getParticipantScenarioRecord } from "./progressRecords";
 import { removeAccountsFromByAccount } from "./modeMetrics";
+import { getCloudSyncIntervalMs, syncCloudState } from "./cloudSync";
 
 const MINUTES_PER_DAY = 24 * 60;
 const CLOCK_SPEED = 6;
@@ -39,6 +40,7 @@ const initialState = {
     assignments: storedEffectiveSession?.assignments || {},
     learnModules: storedEffectiveSession?.learnModules || {},
     customScenarios: storedEffectiveSession?.customScenarios || [],
+    customStimuli: storedEffectiveSession?.customStimuli || [],
     records: storedEffectiveSession?.records || [],
     endingStartedAt: storedEffectiveSession?.endingStartedAt || null,
     endedAt: storedEffectiveSession?.endedAt || null,
@@ -65,6 +67,7 @@ const initialState = {
     whatsapp: storedLiveState?.appMutations?.whatsapp || 0,
     maps: storedLiveState?.appMutations?.maps || 0,
     bank: storedLiveState?.appMutations?.bank || 0,
+    singpass: storedLiveState?.appMutations?.singpass || 0,
     settings: storedLiveState?.appMutations?.settings || 0,
     home: storedLiveState?.appMutations?.home || 0,
   },
@@ -74,8 +77,12 @@ const initialState = {
     whatsapp: storedLiveState?.lastOpenMutationSnapshot?.whatsapp || 0,
     maps: storedLiveState?.lastOpenMutationSnapshot?.maps || 0,
     bank: storedLiveState?.lastOpenMutationSnapshot?.bank || 0,
+    singpass: storedLiveState?.lastOpenMutationSnapshot?.singpass || 0,
     settings: storedLiveState?.lastOpenMutationSnapshot?.settings || 0,
     home: storedLiveState?.lastOpenMutationSnapshot?.home || 0,
+  },
+  singpass: storedLiveState?.singpass || {
+    transaction: null,
   },
   metrics: storedLiveState?.metrics || {
     omissionErrors: rigidAppointments.length,
@@ -291,6 +298,7 @@ function basePracticeAccountMetrics() {
     completedSteps: [],
     promptCount: 0,
     highestPromptLevel: 0,
+    promptHistory: [],
     wrongStepAttempts: 0,
     answerAttempts: 0,
     correctAnswers: 0,
@@ -436,6 +444,7 @@ function resetEvaluationState(state) {
       whatsapp: 0,
       maps: 0,
       bank: 0,
+      singpass: 0,
       settings: 0,
       home: 0,
     },
@@ -445,6 +454,7 @@ function resetEvaluationState(state) {
       whatsapp: 0,
       maps: 0,
       bank: 0,
+      singpass: 0,
       settings: 0,
       home: 0,
     },
@@ -461,6 +471,9 @@ function resetEvaluationState(state) {
       cueCount: 0,
       timeToFirstActionMs: null,
     },
+    singpass: {
+      transaction: null,
+    },
       learnMetrics: baseLearnMetrics(),
       practiceMetrics: basePracticeMetrics(),
       assessmentMetrics: baseAssessmentMetrics(),
@@ -468,6 +481,26 @@ function resetEvaluationState(state) {
     adminNotes: "",
     cueLog: [],
     hiddenLog: [],
+  };
+}
+
+function resetCalendarForTaskChange(state) {
+  return {
+    ...state,
+    events: initialEvents,
+    scheduledSourceIds: initialEvents.map((event) => event.sourceId).filter(Boolean),
+    appMutations: {
+      ...state.appMutations,
+      calendar: 0,
+    },
+    lastOpenMutationSnapshot: {
+      ...state.lastOpenMutationSnapshot,
+      calendar: 0,
+    },
+    metrics: baseMetrics(),
+    singpass: {
+      transaction: null,
+    },
   };
 }
 
@@ -645,7 +678,8 @@ function reducer(state, action) {
         return state;
       }
       const learnApp = getCurrentLearnApp(state);
-      if (learnApp && app !== learnApp) {
+      const allowedSingpassHandoff = learnApp === "bank" && app === "singpass";
+      if (learnApp && app !== learnApp && !allowedSingpassHandoff) {
         return persistSessionState({ ...state, hiddenLog: appendLog(state, { kind: "learn_app_blocked", attemptedApp: app, assignedApp: learnApp }) });
       }
       const baseInteractionMetrics = markFirstAction(state);
@@ -881,6 +915,7 @@ function reducer(state, action) {
           whatsapp: 0,
           maps: 0,
           bank: 0,
+          singpass: 0,
           settings: 0,
           home: 0,
         },
@@ -890,8 +925,12 @@ function reducer(state, action) {
           whatsapp: 0,
           maps: 0,
           bank: 0,
+          singpass: 0,
           settings: 0,
           home: 0,
+        },
+        singpass: {
+          transaction: null,
         },
         metrics: baseMetrics(),
         interactionMetrics: {
@@ -997,6 +1036,30 @@ function reducer(state, action) {
       };
       return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "experience_rating_submit", accountId, rating: action.rating }) });
     }
+    case "LOGOUT_USER": {
+      const currentAccount = state.session.userAccounts.find((account) => account.id === state.session.currentUserId);
+      const accountId = currentAccount?.id || state.session.currentUserId;
+      const next = {
+        ...state,
+        currentApp: "home",
+        appHistory: [],
+        tabSwitcherOpen: false,
+        session: {
+          ...state.session,
+          joined: false,
+          joinError: "",
+          currentUserId: null,
+          pendingAlias: currentAccount?.alias || state.session.pendingAlias,
+          pendingUserPin: currentAccount?.pin || state.session.pendingUserPin,
+          readStimuli: [],
+          dismissedStimuli: [],
+          participants: accountId
+            ? state.session.participants.filter((participant) => participant.accountId !== accountId)
+            : state.session.participants,
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "logout_user", accountId }) });
+    }
     case "START_ASSESSMENT": {
       const next = {
         ...state,
@@ -1039,8 +1102,15 @@ function reducer(state, action) {
           lastActionAt: now,
         };
       });
+      const taskResetState = resetCalendarForTaskChange(state);
       const next = {
         ...state,
+        events: taskResetState.events,
+        scheduledSourceIds: taskResetState.scheduledSourceIds,
+        appMutations: taskResetState.appMutations,
+        lastOpenMutationSnapshot: taskResetState.lastOpenMutationSnapshot,
+        metrics: taskResetState.metrics,
+        singpass: taskResetState.singpass,
         currentApp: assignmentResult.localTargeted ? firstCurrentApp : state.currentApp,
         tabSwitcherOpen: assignmentResult.localTargeted ? false : state.tabSwitcherOpen,
         appHistory: assignmentResult.localTargeted ? ["home"] : state.appHistory,
@@ -1284,6 +1354,13 @@ function reducer(state, action) {
           userAccounts: state.session.userAccounts.filter((account) => account.id !== action.accountId),
           removedAccountIds: [...new Set([...(state.session.removedAccountIds || []), action.accountId])],
           participants: state.session.participants.filter((participant) => participant.accountId !== action.accountId),
+          records: state.session.records
+            .map((record) => ({
+              ...record,
+              participants: (record.participants || []).filter((participant) => participant.accountId !== action.accountId),
+            }))
+            .filter((record) => (record.participants || []).length > 0),
+          experienceRatings: Object.fromEntries(Object.entries(state.session.experienceRatings || {}).filter(([id]) => id !== action.accountId)),
           assignments,
           learnModules,
           currentUserId: state.session.currentUserId === action.accountId ? null : state.session.currentUserId,
@@ -1316,8 +1393,16 @@ function reducer(state, action) {
       } else {
         delete nextAssessmentByAccount[action.accountId];
       }
+      const taskResetState = resetCalendarForTaskChange(state);
       const next = {
+        ...taskResetState,
         ...state,
+        events: taskResetState.events,
+        scheduledSourceIds: taskResetState.scheduledSourceIds,
+        appMutations: taskResetState.appMutations,
+        lastOpenMutationSnapshot: taskResetState.lastOpenMutationSnapshot,
+        metrics: taskResetState.metrics,
+        singpass: taskResetState.singpass,
         currentApp: modeResult.localTargeted ? "home" : state.currentApp,
         tabSwitcherOpen: modeResult.localTargeted ? false : state.tabSwitcherOpen,
         appHistory: modeResult.localTargeted ? ["home"] : state.appHistory,
@@ -1346,8 +1431,15 @@ function reducer(state, action) {
       if (!assignmentResult) {
         return state;
       }
+      const taskResetState = resetCalendarForTaskChange(state);
       const next = {
         ...state,
+        events: taskResetState.events,
+        scheduledSourceIds: taskResetState.scheduledSourceIds,
+        appMutations: taskResetState.appMutations,
+        lastOpenMutationSnapshot: taskResetState.lastOpenMutationSnapshot,
+        metrics: taskResetState.metrics,
+        singpass: taskResetState.singpass,
         currentApp: assignmentResult.localTargeted || !state.session.currentUserId ? action.app : state.currentApp,
         tabSwitcherOpen: assignmentResult.localTargeted ? false : state.tabSwitcherOpen,
         appHistory: assignmentResult.localTargeted ? [action.app] : state.appHistory,
@@ -1431,7 +1523,9 @@ function reducer(state, action) {
           } : learnMetrics.byAccount,
         },
       };
-      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "learn_module_complete", accountId, app }) });
+      const loggedNext = { ...next, hiddenLog: appendLog(next, { kind: "learn_module_complete", accountId, app }) };
+      const withProgress = accountId ? appendParticipantProgressRecord(loggedNext, accountId, now, progressRecordDeps()) : loggedNext;
+      return persistSessionState(withProgress);
     }
     case "SET_PRACTICE_SUPPORT": {
       const accountId = action.accountId || state.session.currentUserId;
@@ -1490,6 +1584,15 @@ function reducer(state, action) {
       if (!accountId) return state;
       const current = getPracticeAccountMetrics(state, accountId);
       const level = action.level || 1;
+      const prompt = {
+        id: `practice-prompt-${Date.now()}`,
+        at: Date.now(),
+        level,
+        text: action.text || "",
+        label: action.label || "",
+        app: state.currentApp,
+        stepId: action.stepId || "",
+      };
       const practiceMetrics = mergePracticeMetrics(state.practiceMetrics);
       const next = {
         ...state,
@@ -1502,11 +1605,12 @@ function reducer(state, action) {
               supportMode: "prompt",
               promptCount: current.promptCount + 1,
               highestPromptLevel: Math.max(current.highestPromptLevel, level),
+              promptHistory: [prompt, ...(current.promptHistory || [])].slice(0, 20),
             },
           },
         },
       };
-      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "practice_prompt", accountId, level }) });
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "practice_prompt", accountId, level, text: prompt.text, stepId: prompt.stepId }) });
     }
     case "TRACK_PRACTICE_WRONG_STEP": {
       const accountId = action.accountId || state.session.currentUserId;
@@ -1569,6 +1673,83 @@ function reducer(state, action) {
       };
       return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "add_custom_scenario", scenarioId: scenario.id }) });
     }
+    case "PUSH_CUSTOM_STIMULUS": {
+      const now = Date.now();
+      const app = action.app === "whatsapp" ? "whatsapp" : "sms";
+      const targetId = action.targetId || "all";
+      const title = String(action.title || (app === "sms" ? "Custom SMS" : "Custom chat")).trim();
+      const preview = String(action.preview || action.message || "New message").trim();
+      const instructions = String(action.instructions || action.encouragement || "Review the message.").trim();
+      const existingThread = (state.session.customStimuli || []).find((stimulus) => (
+        stimulus.mode === "free"
+        && stimulus.app === app
+        && (stimulus.targetId || "all") === targetId
+        && String(stimulus.title || "").trim().toLowerCase() === title.toLowerCase()
+      ));
+      const stimulus = {
+        id: `custom-${app}-${now}`,
+        app,
+        threadId: existingThread?.threadId || `custom-${app}-${now}`,
+        targetId,
+        mode: "free",
+        pushedAt: now,
+        delayMs: 0,
+        title,
+        preview,
+        instructions,
+        message: preview,
+      };
+      const targets = resolvePushTargets(state.session, targetId);
+      const userModes = { ...state.session.userModes };
+      const participants = state.session.participants.map((participant) => {
+        if (!targets.includes(participant.accountId)) {
+          return participant;
+        }
+        userModes[participant.accountId] = "free";
+        return {
+          ...participant,
+          mode: "free",
+          activeScenarioId: "",
+          currentApp: app,
+          lastSeenAt: now,
+        };
+      });
+      const localTargeted = targets.includes(state.session.currentUserId);
+      const next = {
+        ...state,
+        currentApp: localTargeted ? app : state.currentApp,
+        tabSwitcherOpen: localTargeted ? false : state.tabSwitcherOpen,
+        appHistory: localTargeted ? ["home"] : state.appHistory,
+        session: {
+          ...clearEndedSessionForPush(state.session),
+          mode: "free",
+          userModes,
+          participants,
+          assignments: Object.fromEntries(Object.entries(state.session.assignments || {}).filter(([accountId]) => !targets.includes(accountId))),
+          learnModules: Object.fromEntries(Object.entries(state.session.learnModules || {}).filter(([accountId]) => !targets.includes(accountId))),
+          customStimuli: [stimulus, ...(state.session.customStimuli || [])].slice(0, 30),
+          readStimuli: localTargeted ? [] : state.session.readStimuli,
+          dismissedStimuli: localTargeted ? [] : state.session.dismissedStimuli,
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "push_custom_stimulus", app, targetId, title }) });
+    }
+    case "REMOVE_CUSTOM_STIMULUS": {
+      const stimulus = (state.session.customStimuli || []).find((item) => item.id === action.stimulusId);
+      if (!stimulus) {
+        return state;
+      }
+      const next = {
+        ...state,
+        session: {
+          ...state.session,
+          customStimuli: (state.session.customStimuli || []).filter((item) => item.id !== action.stimulusId),
+          readStimuli: (state.session.readStimuli || []).filter((id) => id !== action.stimulusId),
+          dismissedStimuli: (state.session.dismissedStimuli || []).filter((id) => id !== action.stimulusId),
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "remove_custom_stimulus", stimulusId: action.stimulusId, app: stimulus.app, title: stimulus.title }) });
+    }
     case "PUSH_SCENARIO": {
       const scenarioId = action.scenarioId;
       const scenario = [...SCENARIO_LIBRARY, ...state.session.customScenarios].find((item) => item.id === scenarioId);
@@ -1597,8 +1778,15 @@ function reducer(state, action) {
           startedAt: now,
         };
       });
+      const taskResetState = resetCalendarForTaskChange(state);
       const next = {
         ...state,
+        events: taskResetState.events,
+        scheduledSourceIds: taskResetState.scheduledSourceIds,
+        appMutations: taskResetState.appMutations,
+        lastOpenMutationSnapshot: taskResetState.lastOpenMutationSnapshot,
+        metrics: taskResetState.metrics,
+        singpass: taskResetState.singpass,
         currentApp: assignmentResult.localTargeted ? firstCurrentApp : state.currentApp,
         tabSwitcherOpen: assignmentResult.localTargeted ? false : state.tabSwitcherOpen,
         appHistory: assignmentResult.localTargeted ? ["home"] : state.appHistory,
@@ -1673,6 +1861,73 @@ function reducer(state, action) {
       const next = updateAssessmentAction(baseNext, action.eventType);
       return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: action.eventType, target: action.target, valueMs: action.valueMs }) });
     }
+    case "REQUEST_SINGPASS_TRANSACTION": {
+      const accountId = action.accountId || state.session.currentUserId;
+      const now = Date.now();
+      const transaction = {
+        id: `sp-${now}`,
+        source: action.source || "bank",
+        requestedAt: now,
+        accountId,
+        status: "pending",
+        payee: action.payee || "Hougang Polyclinic",
+        amount: action.amount || "25.00",
+        purpose: action.purpose || "Clinic bill",
+        reference: action.reference || "PB-CLINIC-2500",
+      };
+      const next = {
+        ...state,
+        singpass: {
+          transaction,
+        },
+        appMutations: {
+          ...state.appMutations,
+          singpass: (state.appMutations.singpass || 0) + 1,
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "singpass_request", accountId, payee: transaction.payee, amount: transaction.amount }) });
+    }
+    case "APPROVE_SINGPASS_TRANSACTION": {
+      const transaction = state.singpass?.transaction;
+      if (!transaction) return state;
+      const nextTransaction = { ...transaction, status: "approved", respondedAt: Date.now() };
+      const next = {
+        ...state,
+        singpass: {
+          transaction: nextTransaction,
+        },
+        appMutations: {
+          ...state.appMutations,
+          singpass: (state.appMutations.singpass || 0) + 1,
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "singpass_approved", accountId: transaction.accountId, payee: transaction.payee, amount: transaction.amount }) });
+    }
+    case "REJECT_SINGPASS_TRANSACTION": {
+      const transaction = state.singpass?.transaction;
+      if (!transaction) return state;
+      const nextTransaction = { ...transaction, status: "rejected", respondedAt: Date.now() };
+      const next = {
+        ...state,
+        singpass: {
+          transaction: nextTransaction,
+        },
+        appMutations: {
+          ...state.appMutations,
+          singpass: (state.appMutations.singpass || 0) + 1,
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "singpass_rejected", accountId: transaction.accountId, payee: transaction.payee, amount: transaction.amount }) });
+    }
+    case "CLEAR_SINGPASS_TRANSACTION": {
+      const next = {
+        ...state,
+        singpass: {
+          transaction: null,
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "singpass_cleared" }) });
+    }
     default:
       return state;
   }
@@ -1682,6 +1937,11 @@ const VirtualOSContext = createContext(null);
 
 export function VirtualOSProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const stateRef = useRef(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1709,6 +1969,14 @@ export function VirtualOSProvider({ children }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      syncCloudState(stateRef.current);
+    }, getCloudSyncIntervalMs());
+    syncCloudState(stateRef.current);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const api = useMemo(() => {
     return {
       state,
@@ -1731,6 +1999,7 @@ export function VirtualOSProvider({ children }) {
       startAssessment: () => dispatch({ type: "START_ASSESSMENT" }),
       createSession: () => dispatch({ type: "CREATE_SESSION" }),
       joinSession: (pin, participantPin) => dispatch({ type: "JOIN_SESSION", pin, participantPin }),
+      logoutUser: () => dispatch({ type: "LOGOUT_USER" }),
       setPendingUserIdentity: (alias, participantPin) => dispatch({ type: "SET_PENDING_USER_IDENTITY", alias, participantPin }),
       markStimulusRead: (stimulusId) => dispatch({ type: "MARK_STIMULUS_READ", stimulusId }),
       dismissStimulus: (stimulusId) => dispatch({ type: "DISMISS_STIMULUS", stimulusId }),
@@ -1746,10 +2015,12 @@ export function VirtualOSProvider({ children }) {
       completeLearnModule: (app, accountId) => dispatch({ type: "COMPLETE_LEARN_MODULE", app, accountId }),
       setPracticeSupport: (supportMode, options = {}) => dispatch({ type: "SET_PRACTICE_SUPPORT", supportMode, ...options }),
       trackPracticeStep: (stepId, isComplete) => dispatch({ type: "TRACK_PRACTICE_STEP", stepId, isComplete }),
-      trackPracticePrompt: (level) => dispatch({ type: "TRACK_PRACTICE_PROMPT", level }),
+      trackPracticePrompt: (level, prompt = {}) => dispatch({ type: "TRACK_PRACTICE_PROMPT", level, ...prompt }),
       trackPracticeWrongStep: () => dispatch({ type: "TRACK_PRACTICE_WRONG_STEP" }),
       trackPracticeAnswer: (stepId, correct) => dispatch({ type: "TRACK_PRACTICE_ANSWER", stepId, correct }),
       addCustomScenario: (scenario) => dispatch({ type: "ADD_CUSTOM_SCENARIO", scenario }),
+      pushCustomStimulus: (stimulus) => dispatch({ type: "PUSH_CUSTOM_STIMULUS", ...stimulus }),
+      removeCustomStimulus: (stimulusId) => dispatch({ type: "REMOVE_CUSTOM_STIMULUS", stimulusId }),
       pushScenario: (scenarioId, targetId) => dispatch({ type: "PUSH_SCENARIO", scenarioId, targetId }),
       pushAssessment: (scenarioId, targetId) => dispatch({ type: "PUSH_ASSESSMENT", scenarioId, targetId }),
       completeAssessment: (accountId, completedAt) => dispatch({ type: "COMPLETE_ASSESSMENT", accountId, completedAt }),
@@ -1758,6 +2029,10 @@ export function VirtualOSProvider({ children }) {
       pushAssessmentPrompt: (accountId, prompt) => dispatch({ type: "PUSH_ASSESSMENT_PROMPT", accountId, ...prompt }),
       trackAssessmentAnswer: (accountId, checkId, correct) => dispatch({ type: "TRACK_ASSESSMENT_ANSWER", accountId, checkId, correct }),
       trackAssessmentStep: (accountId, stepId) => dispatch({ type: "TRACK_ASSESSMENT_STEP", accountId, stepId }),
+      requestSingpassTransaction: (transaction) => dispatch({ type: "REQUEST_SINGPASS_TRANSACTION", ...transaction }),
+      approveSingpassTransaction: () => dispatch({ type: "APPROVE_SINGPASS_TRANSACTION" }),
+      rejectSingpassTransaction: () => dispatch({ type: "REJECT_SINGPASS_TRANSACTION" }),
+      clearSingpassTransaction: () => dispatch({ type: "CLEAR_SINGPASS_TRANSACTION" }),
       logCue: (text) => dispatch({ type: "LOG_CUE", text }),
       trackInteraction: (event) => dispatch({ type: "TRACK_INTERACTION", ...event }),
     };
@@ -1773,4 +2048,5 @@ export function useVirtualOS() {
   }
   return ctx;
 }
+
 

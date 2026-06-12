@@ -1,5 +1,5 @@
-﻿import { useMemo, useState } from "react";
-import { monthModel } from "../../state/seedData";
+import { useEffect, useMemo, useState } from "react";
+import { formalThreads, monthModel } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { MONTH_LABELS, parseDateWheelPartInput } from "./dateWheelInput";
 import { dateInputValue, datePartsFromValue, parseDateInput, updateDatePartValue } from "./dateUtils";
@@ -29,6 +29,8 @@ function mondayIndex(jsDay) {
 function keyFor(y, m, d) {
   return `${y}-${m}-${d}`;
 }
+
+const doctorAppointment = formalThreads.find((thread) => thread.id === "doctor")?.messages.find((message) => message.appointment)?.appointment;
 
 function buildMonthDays(year, month) {
   const firstDay = new Date(year, month, 1).getDay();
@@ -187,9 +189,43 @@ export function CalendarApp() {
     : state.session.mode;
   const isLearnMode = effectiveMode === "learn";
   const currentUserId = state.session.currentUserId;
+  const assignedLearnApp = currentUserId ? state.session.learnModules?.[currentUserId] : null;
+  const learnDoctorDraft = isLearnMode && assignedLearnApp === "calendar" && doctorAppointment
+    ? {
+        id: "learn-doctor-draft",
+        title: "Doctor appointment",
+        date: doctorAppointment.date,
+        month: doctorAppointment.month,
+        year: doctorAppointment.year,
+        day: doctorAppointment.day,
+        start: doctorAppointment.start,
+        end: doctorAppointment.end,
+        source: "Calendar",
+        rigid: false,
+        learnDraft: true,
+      }
+    : null;
+
+  useEffect(() => {
+    setDisplayYear(currentDate.getFullYear());
+    setDisplayMonth(currentDate.getMonth());
+    setEditorDate(null);
+    setEditingId(null);
+    setForm({
+      title: "",
+      allDay: false,
+      date: "",
+      start: "15:30",
+      end: "16:30",
+    });
+  }, [currentUserId, effectiveMode]);
+
   const visibleEvents = useMemo(() => (
-    state.events.filter((event) => !event.accountId || event.accountId === currentUserId)
-  ), [state.events, currentUserId]);
+    [
+      ...state.events.filter((event) => !event.accountId || event.accountId === currentUserId),
+      ...(learnDoctorDraft ? [learnDoctorDraft] : []),
+    ]
+  ), [state.events, currentUserId, learnDoctorDraft]);
 
   const monthDays = useMemo(() => buildMonthDays(displayYear, displayMonth), [displayYear, displayMonth]);
 
@@ -209,7 +245,17 @@ export function CalendarApp() {
   function openEditor(dayObj) {
     setEditorDate({ year: dayObj.year, month: dayObj.month, date: dayObj.date });
     setEditingId(null);
-    setForm({ title: "", allDay: false, date: dateInputValue(dayObj), start: "15:30", end: "16:30" });
+    const draftOnDay = learnDoctorDraft
+      && learnDoctorDraft.date === dayObj.date
+      && learnDoctorDraft.month === dayObj.month
+      && learnDoctorDraft.year === dayObj.year;
+    setForm({
+      title: draftOnDay ? learnDoctorDraft.title : "",
+      allDay: false,
+      date: dateInputValue(dayObj),
+      start: draftOnDay ? toTimeString(learnDoctorDraft.start) : "15:30",
+      end: draftOnDay ? toTimeString(learnDoctorDraft.end) : "16:30",
+    });
   }
 
   function loadEvent(event) {
@@ -219,7 +265,7 @@ export function CalendarApp() {
       date: event.date,
     };
     setEditorDate(eventDate);
-    setEditingId(event.id);
+    setEditingId(event.learnDraft ? null : event.id);
     setForm({
       title: event.title,
       allDay: false,
@@ -390,18 +436,18 @@ export function CalendarApp() {
   const latestUserEvent = [...visibleEvents].reverse().find((event) => (
     event.source === "Calendar" && !event.rigid
   ));
-  const doctorAppointment = helpers.rigidAppointments.find((appointment) => appointment.id === "sms-doctor-main");
+  const helperDoctorAppointment = helpers.rigidAppointments.find((appointment) => appointment.id === "sms-doctor-main");
   const targetDate = latestUserEvent
     ? {
         year: latestUserEvent.year ?? monthModel.year,
         month: latestUserEvent.month ?? monthModel.month,
         date: latestUserEvent.date,
       }
-    : doctorAppointment
+    : helperDoctorAppointment
       ? {
-          year: doctorAppointment.year,
-          month: doctorAppointment.month,
-          date: doctorAppointment.date,
+          year: helperDoctorAppointment.year,
+          month: helperDoctorAppointment.month,
+          date: helperDoctorAppointment.date,
         }
       : null;
 
@@ -469,5 +515,6 @@ export function CalendarApp() {
     </div>
   );
 }
+
 
 

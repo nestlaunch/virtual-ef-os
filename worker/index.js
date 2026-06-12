@@ -75,9 +75,10 @@ async function createAccount(env, body) {
     .bind(alias)
     .first();
   if (existing) {
-    return error("Alias already exists.", 409);
+    return json({ ok: true, account: { id: existing.id, alias }, existing: true });
   }
-  const accountId = randomId("acct");
+  const requestedId = String(body.id || "").trim();
+  const accountId = requestedId && /^[A-Za-z0-9_-]{3,80}$/.test(requestedId) ? requestedId : randomId("acct");
   const salt = crypto.randomUUID();
   const pinHash = await hashPin(pin, salt);
   await env.DB.prepare(
@@ -105,9 +106,35 @@ async function listAccounts(env) {
   return json({ ok: true, accounts: results || [] });
 }
 
+async function removeAccount(env, accountId) {
+  if (!accountId) {
+    return error("Account ID is required.", 400);
+  }
+  await env.DB.prepare("DELETE FROM records WHERE account_id = ?").bind(accountId).run();
+  await env.DB.prepare("DELETE FROM assignments WHERE account_id = ?").bind(accountId).run();
+  await env.DB.prepare("DELETE FROM session_participants WHERE account_id = ?").bind(accountId).run();
+  await env.DB.prepare("UPDATE accounts SET removed_at = unixepoch() WHERE id = ?")
+    .bind(accountId)
+    .run();
+  await env.DB.prepare(
+    "INSERT INTO audit_log (id, account_id, actor, kind, payload_json, created_at) VALUES (?, ?, 'admin', 'account_removed', '{}', unixepoch())",
+  ).bind(randomId("audit"), accountId).run();
+  return json({ ok: true });
+}
+
 async function createSession(request, env) {
   const body = await readJson(request);
   const pin = body.pin && /^[A-Z0-9]{6}$/.test(String(body.pin)) ? String(body.pin) : randomPin();
+  const existingActive = await env.DB.prepare(
+    "SELECT id FROM sessions WHERE pin = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+  ).bind(pin).first();
+  if (existingActive) {
+    const response = await sessionStub(env, pin).fetch("https://session/state", { method: "GET" });
+    if (response.ok) {
+      const payload = await response.json();
+      return json({ ok: true, session: payload.session, existing: true });
+    }
+  }
   const sessionId = randomId("sess");
   await env.DB.prepare(
     "INSERT INTO sessions (id, pin, status, created_at, expires_at) VALUES (?, ?, 'active', unixepoch(), ?)",
@@ -137,7 +164,7 @@ async function saveRecord(request, env) {
     return error("accountId and mode are required.");
   }
   await env.DB.prepare(
-    `INSERT INTO records (
+    `INSERT OR REPLACE INTO records (
       id, account_id, session_id, mode, scenario_id, started_at, completed_at,
       functional_json, cognitive_json, evidence_json, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
@@ -198,6 +225,9 @@ async function handleApi(request, env) {
   }
   if (request.method === "POST" && parts[0] === "accounts") {
     return createAccount(env, await readJson(request));
+  }
+  if (request.method === "DELETE" && parts[0] === "accounts" && parts[1]) {
+    return removeAccount(env, parts[1]);
   }
   if (request.method === "POST" && parts[0] === "login") {
     return loginAccount(env, await readJson(request));
@@ -284,6 +314,20 @@ export class SessionCoordinator {
         : [...session.participants, participant];
       session.updatedAt = Date.now();
       await this.save(session);
+      if (this.env.DB && session.sessionId) {
+        await this.env.DB.prepare(
+          `INSERT OR REPLACE INTO session_participants
+            (id, session_id, account_id, role, device_id, joined_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          `${session.sessionId}:${participant.accountId}`,
+          session.sessionId,
+          participant.accountId,
+          participant.role,
+          participant.deviceId,
+          Math.floor(participant.joinedAt / 1000),
+        ).run();
+      }
       return json({ ok: true, session });
     }
 
@@ -308,6 +352,21 @@ export class SessionCoordinator {
       session.events = [{ kind: "push", assignment, at: Date.now() }, ...session.events].slice(0, 500);
       session.updatedAt = Date.now();
       await this.save(session);
+      if (this.env.DB && session.sessionId) {
+        await Promise.all(targets.map((targetId) => this.env.DB.prepare(
+          `INSERT INTO assignments
+            (id, session_id, account_id, mode, scenario_id, app, pushed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          `${assignment.id}:${targetId}`,
+          session.sessionId,
+          targetId,
+          assignment.mode,
+          assignment.scenarioId,
+          assignment.app,
+          Math.floor(assignment.pushedAt / 1000),
+        ).run()));
+      }
       return json({ ok: true, assignment, session });
     }
 
@@ -322,6 +381,21 @@ export class SessionCoordinator {
       session.events = [event, ...session.events].slice(0, 500);
       session.updatedAt = Date.now();
       await this.save(session);
+      if (this.env.DB && session.sessionId) {
+        await this.env.DB.prepare(
+          `INSERT INTO audit_log
+            (id, session_id, account_id, actor, kind, payload_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          event.id,
+          session.sessionId,
+          event.accountId,
+          body.actor || "device",
+          event.kind,
+          JSON.stringify(event.payload || {}),
+          Math.floor(event.at / 1000),
+        ).run();
+      }
       return json({ ok: true, event });
     }
 

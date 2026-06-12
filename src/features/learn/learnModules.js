@@ -38,14 +38,80 @@ export const LEARN_MODULES = {
         ],
       },
       {
-        label: "Know app purposes",
+        label: "Scan app icons",
         selectors: ['[data-learn-target="home-apps"]', ".home-app"],
-        instruction: "Scan the app icons. Each app has a different purpose before you open it.",
+        instruction: "Scan the app icons. Each app has a different purpose before you open it. We will practise what each app is used for.",
         question: "Which app is used to save appointments?",
         answers: [
           { label: "Calendar", correct: true },
           { label: "Maps", correct: false },
+          { label: "Singpass", correct: false },
+        ],
+      },
+      {
+        label: "Messages app",
+        selectors: ['[data-learn-target="home-app-messages"]'],
+        instruction: "Messages is used for formal SMS information, such as clinic or appointment messages.",
+        question: "Which app would you open to read a clinic SMS?",
+        answers: [
+          { label: "Messages", correct: true },
           { label: "Bank", correct: false },
+          { label: "WhatsApp", correct: false },
+        ],
+      },
+      {
+        label: "Calendar app",
+        selectors: ['[data-learn-target="home-app-calendar"]'],
+        instruction: "Calendar is used to save, check, edit, and remove appointments.",
+        question: "Which app would you use to record a psychiatry appointment?",
+        answers: [
+          { label: "Calendar", correct: true },
+          { label: "Maps", correct: false },
+          { label: "Singpass", correct: false },
+        ],
+      },
+      {
+        label: "WhatsApp app",
+        selectors: ['[data-learn-target="home-app-whatsapp"]'],
+        instruction: "WhatsApp is used for informal chats, such as replying to family or friends.",
+        question: "Which app would you use to reply to a family dinner message?",
+        answers: [
+          { label: "WhatsApp", correct: true },
+          { label: "Messages", correct: false },
+          { label: "Bank", correct: false },
+        ],
+      },
+      {
+        label: "Maps app",
+        selectors: ['[data-learn-target="home-app-maps"]'],
+        instruction: "Maps is used to enter a start point and destination, then check the route and travel time.",
+        question: "Which app would you use to find travel time to a clinic?",
+        answers: [
+          { label: "Maps", correct: true },
+          { label: "Calendar", correct: false },
+          { label: "Messages", correct: false },
+        ],
+      },
+      {
+        label: "Bank app",
+        selectors: ['[data-learn-target="home-app-bank"]'],
+        instruction: "Bank is used to check account balance and make a simulated payment.",
+        question: "Which app would you use to check your account balance?",
+        answers: [
+          { label: "Bank", correct: true },
+          { label: "Singpass", correct: false },
+          { label: "Calendar", correct: false },
+        ],
+      },
+      {
+        label: "Singpass app",
+        selectors: ['[data-learn-target="home-app-singpass"]'],
+        instruction: "Singpass is used for identity, secure login, and approving expected secure requests.",
+        question: "Which app would you use to approve an expected secure request?",
+        answers: [
+          { label: "Singpass", correct: true },
+          { label: "WhatsApp", correct: false },
+          { label: "Maps", correct: false },
         ],
       },
       {
@@ -110,14 +176,14 @@ export const LEARN_MODULES = {
       {
         label: "Add title",
         selectors: [".title-input"],
-        instruction: "Type exactly: Psychiatry appointment. Date and time unlock after the title is filled.",
+        instruction: "Type exactly: **Psychiatry appointment**. Date and time unlock after the title is filled.",
         advanceOn: "change",
         validate: (event) => event.target?.value.trim().toLowerCase() === "psychiatry appointment",
       },
       {
-        label: "Check date",
+        label: "Change date",
         selectors: [".date-wheel-fields", ".date-wheel-part", ".date-wheel-value"],
-        instruction: `Type ${String(doctorDateParts.date).padStart(2, "0")}, ${doctorDateParts.monthShort}, and ${doctorDateParts.year} into the three date boxes.`,
+        instruction: `Change the date boxes to **${String(doctorDateParts.date).padStart(2, "0")}**, **${doctorDateParts.monthShort}**, and **${doctorDateParts.year}**.`,
         advanceOn: "change",
         validate: (event) => {
           const parts = event.detail?.dateParts;
@@ -127,7 +193,7 @@ export const LEARN_MODULES = {
       {
         label: "Check time",
         selectors: [".time-edit"],
-        instruction: "Set the start time to 15:00 and the end time to 16:00.",
+        instruction: "Set the start time to **15:00** and the end time to **16:00**.",
         advanceOn: "change",
         validate: () => {
           const times = Array.from(document.querySelectorAll(".time-edit")).map((node) => node.value);
@@ -135,10 +201,10 @@ export const LEARN_MODULES = {
         },
       },
       {
-        label: "Save entry",
+        label: "Save changed entry",
         selectors: [".save-btn"],
-        instruction: "Tap Save to place the entry onto the calendar.",
-        output: "After saving, we will practise how to edit the entry.",
+        instruction: "Tap **Save** to place the changed appointment onto the calendar.",
+        output: "After saving, we will practise how to edit the appointment title.",
         completeEvent: "virtual-os-learn-calendar-saved",
         advanceOnComplete: true,
       },
@@ -157,7 +223,7 @@ export const LEARN_MODULES = {
       {
         label: "Edit details",
         selectors: [".title-input", ".save-btn"],
-        instruction: "Edit only the title to Psychiatry follow-up. Keep the same date and time, then tap Save.",
+        instruction: "Edit only the title to **Psychiatry follow-up**. Keep the same date and time, then tap **Save**.",
         output: "Learning is complete when the edited entry is saved.",
         completeEvent: "virtual-os-learn-calendar-saved",
       },
@@ -175,7 +241,7 @@ export const LEARN_MODULES = {
       {
         label: "Send reply",
         selectors: ['[data-learn-target="wa-dinner-bubble"]', ".wa-input-row input", ".wa-input-row button"],
-        instruction: "Read the dinner message. Type exactly: Yes, I can attend dinner. Then tap Send.",
+        instruction: "Read the dinner message. Type exactly: **Yes, I can attend dinner.** Then tap **Send**.",
         output: "Learning is complete when your dinner reply is sent.",
         completeEvent: "virtual-os-learn-whatsapp-replied",
       },
@@ -262,23 +328,111 @@ export const LEARN_MODULES = {
       {
         label: "Choose recipient",
         selectors: [".bank-account-select select", ".bank-payee-card"],
-        instruction: "Choose the recipient Hougang Polyclinic.",
+        instruction: "Choose the recipient **Hougang Polyclinic**.",
         advanceOn: "click",
         validate: (event) => Boolean(event.target?.closest?.(".bank-payee-card")),
       },
       {
         label: "Enter amount",
-        selectors: [".bank-amount-form input", ".bank-primary-btn"],
-        instruction: "Enter amount 25.00 and purpose Clinic bill, then tap Review payment.",
+        selectors: [".bank-amount-form input", ".bank-amount-form .bank-primary-btn"],
+        instruction: "Enter amount **25.00** and purpose **Clinic bill**, then tap **Review payment**.",
         advanceOn: "click",
-        validate: (event) => Boolean(event.target?.closest?.(".bank-primary-btn") && !event.target.disabled),
+        validate: (event) => {
+          if (!event.target?.closest?.(".bank-amount-form .bank-primary-btn") || event.target.disabled) return false;
+          const amount = document.querySelector(".bank-amount-form input[type='number']")?.value;
+          const purpose = Array.from(document.querySelectorAll(".bank-amount-form input")).at(-1)?.value;
+          return amount === "25.00" && purpose?.trim().toLowerCase() === "clinic bill";
+        },
       },
       {
         label: "Review payment",
-        selectors: [".bank-review", ".bank-token-card", ".bank-primary-btn"],
-        instruction: "Review the payee and amount. Continue through the simulated approval screen.",
-        output: "Learning is complete when the payment is submitted.",
-        completeEvent: "virtual-os-learn-bank-payment",
+        selectors: [".bank-review", ".bank-primary-btn"],
+        instruction: "Review the payee and amount. Tap **Confirm** only when the recipient is **Hougang Polyclinic** and the amount is **25.00**.",
+        output: "The next screen will ask you to approve the same payment in Singpass.",
+        completeEvent: "virtual-os-learn-bank-confirmed",
+      },
+      {
+        label: "Check Singpass details",
+        selectors: [".singpass-approval-card"],
+        instruction: "Check that Singpass shows **Hougang Polyclinic** and **S$25.00**. Choose the matching details.",
+        question: "Which Singpass transaction details are correct?",
+        answers: [
+          { label: "Hougang Polyclinic, S$25.00", correct: true, accepted: ["Hougang Polyclinic 25", "Polyclinic $25"] },
+          { label: "Hougang Polyclinic, S$250.00", correct: false },
+          { label: "IMH Clinic B, S$25.00", correct: false },
+        ],
+      },
+      {
+        label: "Approve in Singpass",
+        selectors: ['[data-learn-target="singpass-approve"]'],
+        instruction: "Tap Approve only after the payee and amount match the Bank payment.",
+        output: "Learning is complete when Singpass authorises the payment.",
+        completeEvent: "virtual-os-learn-singpass-approved",
+      },
+    ],
+  },
+  singpass: {
+    title: "Singpass target",
+    steps: [
+      {
+        label: "Find dashboard",
+        selectors: ['[data-learn-target="singpass-dashboard"]'],
+        instruction: "Look at the Singpass dashboard. It is used for identity, messages, and approvals.",
+        question: "What should Singpass be used for in this practice?",
+        answers: [
+          { label: "Approving expected secure requests", correct: true },
+          { label: "Chatting with friends", correct: false },
+          { label: "Changing calendar dates", correct: false },
+        ],
+      },
+      {
+        label: "Open login",
+        selectors: ['[data-learn-target="singpass-login-shortcut"]'],
+        instruction: "Tap the Singpass login shortcut to practise signing in to a service.",
+        advanceOn: "click",
+      },
+      {
+        label: "Find NRIC card",
+        selectors: ['[data-learn-target="singpass-nric-input"]'],
+        wallet: true,
+        requireWalletSelection: true,
+        instruction: "Tap **Wallet**, choose the card that contains the Singpass ID, then answer using the information on the cards.",
+        question: "Which detail should be entered as the Singpass ID?",
+        answers: [
+          { label: "S1234567A", correct: true },
+          { label: "12061989", correct: false },
+          { label: "034-1-22-908", correct: false },
+        ],
+      },
+      {
+        label: "Input NRIC",
+        selectors: ['[data-learn-target="singpass-nric-input"]'],
+        instruction: "Tap the Singpass ID field and enter **S1234567A** from the NRIC card.",
+        advanceOn: "change",
+        validate: (event) => event.target?.value === "S1234567A",
+      },
+      {
+        label: "Complete login",
+        selectors: ['[data-learn-target="singpass-login-submit"]'],
+        instruction: "Tap Log in to return to the Singpass dashboard.",
+        advanceOn: "click",
+      },
+      {
+        label: "Check Digital IC",
+        selectors: ['[data-learn-target="singpass-digital-id"]'],
+        instruction: "Look at the Digital IC card on the dashboard. Check the name and card type.",
+        question: "Which card is visible on the dashboard?",
+        answers: [
+          { label: "Digital IC", correct: true },
+          { label: "Calendar appointment", correct: false },
+          { label: "WhatsApp chat", correct: false },
+        ],
+      },
+      {
+        label: "Open Inbox",
+        selectors: ['[data-learn-target="singpass-inbox-tile"]', ".singpass-message-row"],
+        instruction: "Open Inbox to view agency messages. Check sender and purpose before acting.",
+        advanceOn: "click",
       },
     ],
   },

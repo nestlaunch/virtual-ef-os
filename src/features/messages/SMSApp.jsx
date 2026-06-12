@@ -1,8 +1,29 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { formalThreads } from "../../state/seedData";
-import { findStimulus, getVisibleThreadIdsForState } from "../../state/stimulusSequence";
+import { findStimulusForState, getCustomStimuliForApp, getVisibleThreadIdsForState } from "../../state/stimulusSequence";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { getCurrentAssignment } from "../../state/sessionLifecycle";
+
+function groupCustomStimuli(stimuli) {
+  const groups = new Map();
+  stimuli.forEach((stimulus) => {
+    const key = stimulus.threadId;
+    const existing = groups.get(key) || {
+      id: stimulus.threadId,
+      sender: stimulus.title,
+      preview: stimulus.preview || stimulus.message,
+      timeLabel: "Now",
+      unread: 0,
+      avatarColor: "#0f62b6",
+      messages: [],
+    };
+    existing.preview = stimulus.preview || stimulus.message;
+    existing.unread += 1;
+    existing.messages.unshift({ id: `${stimulus.id}-msg`, text: stimulus.message || stimulus.preview, time: "Today" });
+    groups.set(key, existing);
+  });
+  return [...groups.values()];
+}
 
 function Avatar({ color }) {
   return (
@@ -17,7 +38,11 @@ export function SMSApp() {
   const [activeId, setActiveId] = useState(null);
   const currentAssignment = getCurrentAssignment(state.session, state.session.currentUserId);
   const visibleIds = getVisibleThreadIdsForState("sms", state);
-  const visibleThreads = formalThreads.filter((thread) => visibleIds.includes(thread.id));
+  const customThreads = groupCustomStimuli(getCustomStimuliForApp(state, "sms"));
+  const visibleThreads = [
+    ...formalThreads.filter((thread) => visibleIds.includes(thread.id)),
+    ...customThreads,
+  ];
   const active = useMemo(() => visibleThreads.find((t) => t.id === activeId), [activeId, visibleThreads]);
 
   useEffect(() => {
@@ -36,7 +61,7 @@ export function SMSApp() {
   }, [activeId]);
 
   function openThread(threadId) {
-    const stimulus = findStimulus("sms", threadId);
+    const stimulus = findStimulusForState("sms", threadId, state);
     if (stimulus) {
       markStimulusRead(stimulus.id);
     }

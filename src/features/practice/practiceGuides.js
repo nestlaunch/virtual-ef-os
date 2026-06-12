@@ -221,13 +221,35 @@ export const PRACTICE_GUIDES = {
       },
       {
         id: "complete-payment",
-        label: "Complete the simulated payment",
+        label: "Open Singpass approval",
         prompts: [
-          "Finish only after checking the details.",
-          "Use the approval button when the payment is expected.",
-          "Approve the simulated payment.",
+          "After Bank review, move to Singpass for approval.",
+          "The Singpass app should show a pending payment request.",
+          "Confirm in Bank to open Singpass.",
         ],
-        isDone: (event) => event.type === "complete" && event.name === "virtual-os-learn-bank-payment",
+        isDone: (event) => event.type === "app" && event.app === "singpass",
+      },
+      {
+        id: "match-singpass-details",
+        label: "Match Singpass recipient and amount",
+        question: "Which Singpass payment details match the Bank review?",
+        answers: TASK_ANSWER_CHECKS.paymentDetails.answers,
+        prompts: [
+          "Compare Singpass with the Bank payment review.",
+          "The recipient should be Hougang Polyclinic and the amount should be S$25.00.",
+          "Choose Hougang Polyclinic, S$25.00.",
+        ],
+        isDone: (event) => event.type === "answer",
+      },
+      {
+        id: "approve-singpass-payment",
+        label: "Approve payment in Singpass",
+        prompts: [
+          "Only approve after the details match.",
+          "Look for the Singpass Approve button.",
+          "Tap Approve.",
+        ],
+        isDone: (event) => event.type === "complete" && event.name === "virtual-os-learn-singpass-approved",
       },
     ],
   },
@@ -238,6 +260,7 @@ export const COMPLETE_EVENTS = [
   "virtual-os-learn-whatsapp-replied",
   "virtual-os-learn-maps-route",
   "virtual-os-learn-bank-payment",
+  "virtual-os-learn-singpass-approved",
 ];
 
 export const APP_LABELS = {
@@ -247,6 +270,7 @@ export const APP_LABELS = {
   whatsapp: "WhatsApp",
   maps: "Maps",
   bank: "Bank",
+  singpass: "Singpass",
 };
 
 export function isPracticeDateTimeSet(event, { date = doctorDateParts.date, month = doctorDateParts.month, year = doctorDateParts.year, start, end }) {
@@ -447,7 +471,8 @@ export const PRACTICE_PAGE_OVERRIDES = {
     practicePage("home-to-bank", "home", "Home screen", [
       appOpenStep("bank", "Open Bank", "single-bank-open-bank"),
     ]),
-    practicePage("bank-payment", "bank", "Bank page", PRACTICE_GUIDES.bank.steps),
+    practicePage("bank-payment", "bank", "Bank page", PRACTICE_GUIDES.bank.steps.slice(0, 5)),
+    practicePage("singpass-approval", "singpass", "Singpass approval page", PRACTICE_GUIDES.bank.steps.slice(5)),
   ],
   "two-sms-calendar": [
     practicePage("sms-source", "sms", "Messages page", [
@@ -609,6 +634,7 @@ export const PRACTICE_PAGE_OVERRIDES = {
     practicePage("home-to-bank", "home", "Home screen", [
       appOpenStep("bank", "Open Bank", "multi-payment-open-bank"),
     ]),
-    practicePage("bank-payment", "bank", "Bank page", PRACTICE_GUIDES.bank.steps),
+    practicePage("bank-payment", "bank", "Bank page", PRACTICE_GUIDES.bank.steps.slice(0, 5)),
+    practicePage("singpass-approval", "singpass", "Singpass approval page", PRACTICE_GUIDES.bank.steps.slice(5)),
   ],
 };

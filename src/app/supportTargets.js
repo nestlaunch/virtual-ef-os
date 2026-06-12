@@ -12,6 +12,7 @@ export const SUPPORT_TARGET_SELECTORS = [
   ".assessment-prompt-toast",
   ".stimulus-notification",
   ".session-ended-card",
+  ".logout-confirm-overlay",
 ];
 
 export function isSupportTarget(target) {

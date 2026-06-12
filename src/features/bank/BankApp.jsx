@@ -40,7 +40,7 @@ function getPayee(id) {
 }
 
 export function BankApp() {
-  const { state } = useVirtualOS();
+  const { state, openApp, requestSingpassTransaction, clearSingpassTransaction } = useVirtualOS();
   const effectiveMode = state.session.currentUserId
     ? state.session.userModes[state.session.currentUserId] || state.session.mode
     : state.session.mode;
@@ -57,11 +57,20 @@ export function BankApp() {
 
   const selectedAccount = ACCOUNTS.find((account) => account.id === transfer.from) ?? ACCOUNTS[0];
   const selectedPayee = getPayee(transfer.payee);
+  const singpassTransaction = state.singpass?.transaction;
   const numericAmount = Number(transfer.amount);
   const isScamTransfer = Boolean(selectedPayee?.scam);
-  const canReview = Boolean(selectedPayee && numericAmount > 0 && numericAmount <= selectedAccount.balance);
   const isLearnMode = effectiveMode === "learn";
   const isPracticeMode = effectiveMode === "practice";
+  const learnPaymentReady = transfer.payee === "hougang-polyclinic"
+    && transfer.amount === "25.00"
+    && transfer.note.trim().toLowerCase() === "clinic bill";
+  const canReview = Boolean(
+    selectedPayee
+    && numericAmount > 0
+    && numericAmount <= selectedAccount.balance
+    && (!isLearnMode || learnPaymentReady)
+  );
   const availablePayees = isLearnMode ? PAYEES.filter((payee) => !payee.scam) : PAYEES;
 
   const flowProgress = useMemo(() => {
@@ -113,6 +122,42 @@ export function BankApp() {
   function choosePayee(payeeId) {
     updateTransfer({ payee: payeeId });
     setScreen("amount");
+  }
+
+  function requestSingpassApproval() {
+    requestSingpassTransaction({
+      source: "bank",
+      payee: selectedPayee?.name,
+      amount: transfer.amount,
+      purpose: transfer.note || "Clinic bill",
+      reference: "PB-CLINIC-2500",
+    });
+    window.dispatchEvent(new CustomEvent("virtual-os-learn-bank-confirmed", {
+      detail: { payee: selectedPayee?.name, amount: transfer.amount },
+    }));
+    openApp("singpass");
+  }
+
+  if (singpassTransaction?.source === "bank" && ["approved", "rejected"].includes(singpassTransaction.status)) {
+    return (
+      <div className="bank-app">
+        <BankHeader onHome={() => setScreen("home")} />
+        <main className="bank-content">
+          <ResultScreen
+            title={singpassTransaction.status === "approved" ? "Payment authorised" : "Payment stopped"}
+            message={
+              singpassTransaction.status === "approved"
+                ? `Singpass approved ${maskAmount(singpassTransaction.amount)} to ${singpassTransaction.payee}.`
+                : "Singpass rejected the payment request. No simulated payment was made."
+            }
+            onDone={() => {
+              clearSingpassTransaction();
+              setScreen("home");
+            }}
+          />
+        </main>
+      </div>
+    );
   }
 
   if (screen === "login") {
@@ -414,7 +459,7 @@ export function BankApp() {
               transfer={transfer}
               isScamTransfer={isScamTransfer}
               onBack={() => setScreen("amount")}
-              onConfirm={() => setScreen("token")}
+              onConfirm={requestSingpassApproval}
             />
           ) : null}
           {screen === "token" ? (

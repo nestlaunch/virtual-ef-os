@@ -134,7 +134,7 @@ export const TASK_ANSWER_CHECKS = {
   },
   paymentDetails: {
     id: "payment-details",
-    practiceStepIds: ["review-details"],
+    practiceStepIds: ["review-details", "match-singpass-details"],
     question: "Payment recipient and amount",
     answers: [{
       label: "Hougang Polyclinic, S$25.00",

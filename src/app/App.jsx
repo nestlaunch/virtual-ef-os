@@ -9,13 +9,14 @@ import { WhatsAppApp } from "../features/whatsapp/WhatsAppApp";
 import { SettingsApp } from "../features/settings/SettingsApp";
 import { MapsApp } from "../features/maps/MapsApp";
 import { BankApp } from "../features/bank/BankApp";
+import { SingpassApp } from "../features/singpass/SingpassApp";
 import { Dock } from "../features/system/Dock";
 import { AdminPanel } from "../features/admin/AdminPanel";
 import { JoinSession } from "../features/session/JoinSession";
 import { SessionEndedOverlay } from "../features/session/SessionEndedOverlay";
 import { PracticeGuidePanel } from "../features/practice/PracticeGuidePanel";
 import { LEARN_APP_CATALOG, formatAlias } from "../state/v2Assessment";
-import { getLatestUnreadStimulus } from "../state/stimulusSequence";
+import { getLatestCustomStimulusForState, getLatestUnreadStimulus } from "../state/stimulusSequence";
 import { getCurrentAssignment } from "../state/sessionLifecycle";
 import { LearnTourOverlay, getAssignedLearnApp, getBroadLearnStep, getLearnModuleForState, isAllowedLearnTarget } from "../features/learn/LearnTourOverlay";
 import { AssessmentCompleteOverlay, AssessmentPromptOverlay, AssessmentStartOverlay, AssessmentTaskPanel, getActiveAssessmentScenario } from "../features/assessment/AssessmentOverlays";
@@ -42,9 +43,42 @@ function StimulusNotification() {
       >
         <strong>{stimulus.title}</strong>
         <span>{stimulus.preview}</span>
-        <em>{stimulus.encouragement}</em>
       </button>
       <button type="button" aria-label="Dismiss notification" onClick={() => dismissStimulus(stimulus.id)}>x</button>
+    </aside>
+  );
+}
+
+function FreeTaskPanel() {
+  const { state, openApp } = useVirtualOS();
+  const stimulus = getLatestCustomStimulusForState(state);
+  const effectiveMode = state.session.currentUserId
+    ? state.session.userModes[state.session.currentUserId] || state.session.mode
+    : state.session.mode;
+
+  if (effectiveMode !== "free" || !stimulus) {
+    return null;
+  }
+
+  const targetApp = stimulus.app === "sms" ? "sms" : "whatsapp";
+
+  return (
+    <aside className="free-task-card" data-support-ui="true">
+      <span>Free</span>
+      <strong>{stimulus.title}</strong>
+      <div className="free-task-message">
+        <b>{stimulus.app === "sms" ? "SMS message" : "WhatsApp message"}</b>
+        <p>{stimulus.message || stimulus.preview}</p>
+      </div>
+      {(stimulus.instructions || stimulus.encouragement) ? (
+        <div className="free-task-instructions">
+          <b>Instructions</b>
+          <p>{stimulus.instructions || stimulus.encouragement}</p>
+        </div>
+      ) : null}
+      <button type="button" onClick={() => openApp(targetApp)}>
+        Open {stimulus.app === "sms" ? "Messages" : "WhatsApp"}
+      </button>
     </aside>
   );
 }
@@ -58,6 +92,7 @@ function AppSwitcher() {
     { id: "whatsapp", label: "WhatsApp" },
     { id: "maps", label: "Maps" },
     { id: "bank", label: "Bank" },
+    { id: "singpass", label: "Singpass" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -101,6 +136,7 @@ function ActiveApp() {
     whatsapp: <WhatsAppApp />,
     maps: <MapsApp />,
     bank: <BankApp />,
+    singpass: <SingpassApp />,
     settings: <SettingsApp />,
   };
 
@@ -129,8 +165,9 @@ function ActiveApp() {
 }
 
 function ClinicalWorkspace() {
-  const { state, trackInteraction, trackLearnAttempt } = useVirtualOS();
+  const { state, logoutUser, trackInteraction, trackLearnAttempt } = useVirtualOS();
   const focusedInputs = useRef(new WeakMap());
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isAdminRoute = window.location.pathname.replace(/\/+$/, "") === "/admin";
   const currentAccount = state.session.userAccounts.find((account) => account.id === state.session.currentUserId);
   const effectiveMode = state.session.currentUserId
@@ -141,9 +178,11 @@ function ClinicalWorkspace() {
     ? getCurrentAssignment(state.session, state.session.currentUserId, "practice")?.scenarioId
     : null;
   const activeAssessmentScenario = getActiveAssessmentScenario(state);
+  const activeFreeStimulus = getLatestCustomStimulusForState(state);
   const hasSideGuide = Boolean(assignedLearnApp)
     || Boolean(effectiveMode === "practice" && activePracticeScenarioId)
-    || Boolean(effectiveMode === "assessment" && activeAssessmentScenario);
+    || Boolean(effectiveMode === "assessment" && activeAssessmentScenario)
+    || Boolean(effectiveMode === "free" && activeFreeStimulus);
 
   function describeTarget(target) {
     if (!target) {
@@ -280,6 +319,9 @@ function ClinicalWorkspace() {
           <div className="patient-session-chip">
             <span>Signed in as</span>
             <strong>{formatAlias(currentAccount.alias)}</strong>
+            <button type="button" onClick={() => setShowLogoutConfirm(true)} data-support-ui="true">
+              Log out
+            </button>
           </div>
         ) : null}
         <section
@@ -300,6 +342,29 @@ function ClinicalWorkspace() {
         <LearnTourOverlay />
         <PracticeGuidePanel />
         <AssessmentTaskPanel />
+        <FreeTaskPanel />
+        {showLogoutConfirm ? (
+          <aside className="logout-confirm-overlay" role="dialog" aria-modal="true" aria-label="Confirm log out" data-support-ui="true">
+            <div>
+              <span>Log out</span>
+              <strong>Leave this account?</strong>
+              <p>You will return to the login screen. The admin will no longer see this device as joined.</p>
+              <div>
+                <button type="button" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    logoutUser();
+                  }}
+                >
+                  Log out
+                </button>
+              </div>
+            </div>
+          </aside>
+        ) : null}
       </section>
       )}
     </main>

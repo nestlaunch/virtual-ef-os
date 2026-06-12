@@ -59,6 +59,13 @@ export const APP_CATALOG = [
     purpose: "Check balance and complete a simulated payment using exact recipient and amount details.",
     domains: ["information extraction", "self-monitoring", "task execution"],
   },
+  {
+    id: "singpass",
+    label: "Singpass",
+    currentApp: "singpass",
+    purpose: "Review and approve sensitive identity or payment requests only when details match.",
+    domains: ["self-monitoring", "information extraction", "security judgement"],
+  },
 ];
 
 export const LEARN_APP_CATALOG = [
@@ -176,13 +183,15 @@ export const SCENARIO_LIBRARY = [
     complexity: "Single app",
     apps: ["bank"],
     mode: "practice",
-    description: "Check balance, then make a simulated payment to Hougang Polyclinic.",
+    description: "Check balance, make a simulated payment to Hougang Polyclinic, then approve it in Singpass.",
     successCriteria: [
       "Check total balance: S$2262.60",
       "Choose Hougang Polyclinic",
       "Enter amount: 25.00",
       "Enter purpose: Clinic bill",
-      "Review and approve payment",
+      "Open Singpass",
+      "Match recipient and amount",
+      "Approve payment in Singpass",
     ],
   },
   {
@@ -261,7 +270,7 @@ export const SCENARIO_LIBRARY = [
     id: "multi-payment-appointment",
     title: "Payment and Appointment Check",
     complexity: "Multi-app",
-    apps: ["messages", "calendar", "bank"],
+    apps: ["messages", "calendar", "bank", "singpass"],
     mode: "practice",
     description: "Check appointment information, confirm Calendar, and complete a simulated clinic payment.",
     successCriteria: [
@@ -270,6 +279,7 @@ export const SCENARIO_LIBRARY = [
       "Open Bank",
       "Pay Hougang Polyclinic S$25.00",
       "Review before approving",
+      "Approve payment in Singpass",
     ],
   },
 ];

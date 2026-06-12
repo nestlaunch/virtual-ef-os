@@ -782,6 +782,14 @@ button, input, select{
   background:linear-gradient(135deg, rgba(255, 255, 255, .2), transparent 42%), linear-gradient(135deg, #e31f2f 0, #e31f2f 49%, #0a54a3 50%, #0a54a3)
 }
 
+.app-icon.singpass{
+  background:linear-gradient(145deg, #ff4b2e, #d71920);
+  color:#ffffff;
+  font-size:22px;
+  font-weight:900;
+  letter-spacing:0
+}
+
 .home-spacer{
   flex:1 1 auto;
   min-height:0
@@ -2552,6 +2560,296 @@ button, input, select{
   font-weight:900
 }
 
+.singpass-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 26px;
+  background: #f7f8fb;
+  color: #111827;
+}
+
+.singpass-header {
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: 42px 1fr 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 16px 10px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5eaf2;
+}
+
+.singpass-header button {
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.singpass-header strong {
+  color: #111827;
+  font-size: 20px;
+  text-align: center;
+}
+
+.singpass-logo {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #d71920;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.singpass-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+  padding: 14px;
+}
+
+.singpass-dashboard-card,
+.singpass-login-card,
+.singpass-id-card,
+.singpass-approval-card,
+.singpass-result-card,
+.singpass-security-note,
+.singpass-message-row,
+.singpass-pending-banner {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d7deea;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #111827;
+  padding: 14px;
+  text-align: left;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.singpass-dashboard-card {
+  background: linear-gradient(145deg, #fff, #fff3f3);
+  border-color: #ffd1d1;
+}
+
+.singpass-dashboard-card span,
+.singpass-login-card span,
+.singpass-id-card span,
+.singpass-approval-card span,
+.singpass-result-card span,
+.singpass-message-row span,
+.singpass-pending-banner span {
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.singpass-dashboard-card h2,
+.singpass-login-card h2,
+.singpass-id-card h2,
+.singpass-approval-card h2,
+.singpass-result-card h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 25px;
+  line-height: 1.15;
+}
+
+.singpass-dashboard-card p,
+.singpass-login-card p,
+.singpass-id-card p,
+.singpass-result-card p,
+.singpass-security-note p,
+.singpass-message-row p {
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.singpass-tile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.singpass-tile-grid button {
+  min-height: 94px;
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  border: 1px solid #d7deea;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #111827;
+  padding: 12px;
+  text-align: left;
+}
+
+.singpass-tile-grid strong,
+.singpass-message-row strong,
+.singpass-pending-banner strong,
+.singpass-security-note strong {
+  color: #111827;
+  font-weight: 900;
+}
+
+.singpass-tile-grid span,
+.singpass-message-row p,
+.singpass-pending-banner em {
+  color: #334155;
+  font-size: 13px;
+  font-style: normal;
+}
+
+.singpass-pending-banner {
+  border-color: #fca5a5;
+  background: #fff1f2;
+}
+
+.singpass-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.singpass-detail-list div {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  border-bottom: 1px solid #e5eaf2;
+  padding-bottom: 7px;
+}
+
+.singpass-detail-list div:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.singpass-detail-list span {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.singpass-detail-list strong {
+  color: #0f172a;
+  font-size: 17px;
+}
+
+.singpass-security-note {
+  border-color: #bfdbfe;
+  background: #eef6ff;
+}
+
+.singpass-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.singpass-approve-btn,
+.singpass-reject-btn {
+  min-height: 48px;
+  border: none;
+  border-radius: 12px;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.singpass-approve-btn {
+  background: #d71920;
+}
+
+.singpass-reject-btn {
+  background: #475569;
+}
+
+.singpass-login-card label {
+  display: grid;
+  gap: 6px;
+}
+
+.singpass-login-card input {
+  min-height: 48px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #111827;
+  padding: 0 12px;
+  font-weight: 900;
+}
+
+.singpass-id-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 220px;
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+}
+
+.singpass-id-watermark {
+  position: absolute;
+  right: -18px;
+  bottom: 24px;
+  color: rgba(215, 25, 32, 0.08);
+  font-size: 52px;
+  font-weight: 900;
+  transform: rotate(-18deg);
+}
+
+.singpass-id-card button {
+  position: relative;
+  min-height: 44px;
+  border: none;
+  border-radius: 11px;
+  background: #d71920;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.singpass-result-card.approved {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.singpass-result-card.rejected {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.singpass-bottom-nav {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #e5eaf2;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.singpass-bottom-nav button {
+  min-height: 38px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .settings-app{
   background:#1d1d22;
   padding:16px;
@@ -3373,6 +3671,14 @@ body{
   background:linear-gradient(145deg, #ff5668 0, #ff5668 49%, #2167d8 50%, #2167d8)
 }
 
+.app-icon.singpass{
+  background:linear-gradient(145deg, #ff4b2e, #d71920);
+  color:#ffffff;
+  font-size:22px;
+  font-weight:900;
+  letter-spacing:0
+}
+
 .sms-app, .wa-app, .settings-app{
   background:#f8fafc;
   color:#111827
@@ -3743,6 +4049,484 @@ body{
   display:grid;
   gap:7px;
   margin-top:4px
+}
+
+.learn-wallet-tool{
+  display:grid;
+  gap:8px;
+  border:1px solid #fde68a;
+  border-radius:12px;
+  background:#fff8df;
+  padding:10px
+}
+
+.learn-wallet-toggle{
+  width:max-content;
+  min-height:38px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid #d97706;
+  border-radius:999px;
+  background:#fff;
+  color:#111827;
+  padding:0 12px;
+  font-weight:900
+}
+
+.learn-wallet-toggle strong{
+  font-size:14px
+}
+
+.wallet-icon{
+  width:24px;
+  height:18px;
+  display:inline-block;
+  border:2px solid #92400e;
+  border-radius:5px;
+  background:linear-gradient(180deg,#b45309,#78350f);
+  position:relative
+}
+
+.wallet-icon::before{
+  content:"";
+  position:absolute;
+  left:3px;
+  right:3px;
+  top:-7px;
+  height:10px;
+  border:2px solid #92400e;
+  border-bottom:0;
+  border-radius:7px 7px 0 0;
+  background:#fbbf24
+}
+
+.learn-wallet-tray{
+  position:relative;
+  min-height:186px;
+  margin-top:4px
+}
+
+.wallet-card{
+  position:absolute;
+  left:50%;
+  top:8px;
+  width:208px;
+  min-height:140px;
+  border:1px solid rgba(15,23,42,.2);
+  border-radius:14px;
+  background:#fff;
+  color:#111827;
+  padding:0;
+  text-align:left;
+  box-shadow:0 18px 32px rgba(15,23,42,.2);
+  transform-origin:50% 120%;
+  animation:wallet-fan .34s ease-out both;
+  animation-delay:calc(var(--card-index) * 55ms);
+  overflow:hidden
+}
+
+.wallet-card.nric{
+  background:#fff
+}
+
+.wallet-card.bank{
+  background:#08121f
+}
+
+.wallet-card.appointment{
+  background:#f8fbff
+}
+
+.wallet-card:nth-child(1){
+  transform:translateX(-103%) rotate(-8deg)
+}
+
+.wallet-card:nth-child(2){
+  transform:translateX(-50%) rotate(0deg)
+}
+
+.wallet-card:nth-child(3){
+  transform:translateX(3%) rotate(8deg)
+}
+
+.wallet-card.selected{
+  z-index:4;
+  border-color:#1565c0;
+  box-shadow:0 0 0 3px rgba(21,101,192,.16),0 16px 30px rgba(15,23,42,.2)
+}
+
+.wallet-card span{
+  color:#92400e;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.08em
+}
+
+.wallet-card strong{
+  color:#111827;
+  font-size:13px
+}
+
+.wallet-card em,
+.wallet-card small{
+  color:#475569;
+  font-size:11px;
+  font-style:normal;
+  font-weight:800
+}
+
+.wallet-card b{
+  color:#0f376b;
+  font-size:12px
+}
+
+.wallet-card-face{
+  position:relative;
+  min-height:140px;
+  padding:12px;
+  border-radius:13px;
+  overflow:hidden
+}
+
+.wallet-card-face span,
+.wallet-card-face strong,
+.wallet-card-face em,
+.wallet-card-face small,
+.wallet-card-face b,
+.wallet-card-face p{
+  letter-spacing:0;
+  font-style:normal;
+  text-transform:none
+}
+
+.wallet-card-face-nric{
+  background:
+    radial-gradient(circle at 86% 18%,rgba(239,68,68,.16),transparent 24%),
+    linear-gradient(135deg,#fff 0%,#fff6f6 48%,#fee2e2 100%);
+  border:1px solid rgba(185,28,28,.22);
+  color:#1f2937
+}
+
+.wallet-card-watermark{
+  position:absolute;
+  right:-18px;
+  bottom:-24px;
+  color:rgba(185,28,28,.08);
+  font-size:88px;
+  font-weight:1000;
+  line-height:1
+}
+
+.wallet-card-header{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  color:#7f1d1d;
+  font-size:8px;
+  font-weight:1000;
+  text-transform:uppercase
+}
+
+.wallet-card-header span{
+  color:#7f1d1d;
+  font-size:8px;
+  font-weight:1000;
+  letter-spacing:.08em;
+  text-transform:uppercase
+}
+
+.wallet-card-header b{
+  color:#991b1b;
+  font-size:9px;
+  letter-spacing:.08em
+}
+
+.wallet-nric-body{
+  position:relative;
+  display:grid;
+  grid-template-columns:48px 1fr;
+  gap:9px;
+  margin-top:8px;
+  z-index:1
+}
+
+.wallet-card-photo{
+  width:48px;
+  height:58px;
+  display:grid;
+  place-items:center;
+  border-radius:6px;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,0)),
+    #cbd5e1;
+  border:1px solid rgba(100,116,139,.45);
+  box-shadow:inset 0 -16px 0 rgba(71,85,105,.22)
+}
+
+.wallet-card-photo span{
+  color:#334155;
+  font-size:17px;
+  font-weight:1000
+}
+
+.wallet-card-details{
+  display:grid;
+  align-content:start;
+  gap:1px
+}
+
+.wallet-card-details small{
+  color:#64748b;
+  font-size:7px;
+  font-weight:900;
+  text-transform:uppercase
+}
+
+.wallet-card-details strong{
+  color:#111827;
+  font-size:11px;
+  line-height:1.05;
+  font-weight:1000
+}
+
+.wallet-card-details b{
+  color:#111827;
+  font-size:17px;
+  line-height:1.05;
+  font-weight:1000
+}
+
+.wallet-card-grid{
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns:1.7fr .7fr .8fr;
+  gap:5px;
+  margin-top:8px
+}
+
+.wallet-card-grid span{
+  display:grid;
+  gap:1px;
+  color:#7f1d1d;
+  font-size:7px;
+  font-weight:1000
+}
+
+.wallet-card-grid b{
+  color:#111827;
+  font-size:9px;
+  font-weight:1000
+}
+
+.wallet-card-face-nric p{
+  position:relative;
+  z-index:1;
+  margin:7px 0 0;
+  color:#7f1d1d;
+  font-size:7px!important;
+  font-weight:900
+}
+
+.wallet-card-face-bank{
+  background:
+    radial-gradient(circle at 84% 22%,rgba(20,184,166,.4),transparent 24%),
+    linear-gradient(135deg,#0f172a 0%,#102746 52%,#030712 100%);
+  color:#f8fafc
+}
+
+.wallet-card-bank-top,
+.wallet-card-bank-bottom{
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  position:relative;
+  z-index:1
+}
+
+.wallet-card-bank-top strong{
+  color:#fff;
+  font-size:17px;
+  font-weight:1000
+}
+
+.wallet-card-bank-top span{
+  align-self:start;
+  border:1px solid rgba(255,255,255,.35);
+  border-radius:999px;
+  color:#e0f2fe;
+  font-size:8px;
+  font-weight:1000;
+  padding:2px 6px;
+  text-transform:uppercase
+}
+
+.wallet-card-chip{
+  display:block;
+  width:34px;
+  height:26px;
+  margin-top:14px;
+  border-radius:6px;
+  background:
+    linear-gradient(90deg,transparent 48%,rgba(120,53,15,.35) 48% 52%,transparent 52%),
+    linear-gradient(180deg,#fde68a,#d97706);
+  border:1px solid rgba(120,53,15,.45)
+}
+
+.wallet-bank-number{
+  display:block;
+  margin-top:10px;
+  color:#f8fafc!important;
+  font-size:15px!important;
+  font-weight:1000;
+  letter-spacing:.06em
+}
+
+.wallet-card-bank-bottom{
+  margin-top:9px
+}
+
+.wallet-card-bank-bottom span{
+  display:grid;
+  color:#bae6fd;
+  font-size:7px;
+  font-weight:1000;
+  text-transform:uppercase
+}
+
+.wallet-card-bank-bottom b{
+  color:#fff;
+  font-size:10px;
+  font-weight:1000
+}
+
+.wallet-card-face-bank em{
+  display:block;
+  margin-top:5px;
+  color:#f8fafc;
+  font-size:9px;
+  font-weight:1000
+}
+
+.wallet-card-face-appointment{
+  background:
+    linear-gradient(90deg,rgba(37,99,235,.08) 1px,transparent 1px),
+    linear-gradient(180deg,#fff 0%,#eff6ff 100%);
+  background-size:14px 14px,auto;
+  border:1px solid rgba(37,99,235,.24);
+  color:#0f172a
+}
+
+.wallet-appointment-band{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin:-12px -12px 10px;
+  padding:9px 12px;
+  background:#1565c0
+}
+
+.wallet-appointment-band span,
+.wallet-appointment-band b{
+  color:#fff;
+  font-size:9px;
+  font-weight:1000;
+  letter-spacing:.08em;
+  text-transform:uppercase
+}
+
+.wallet-card-face-appointment strong{
+  display:block;
+  color:#0f172a;
+  font-size:13px;
+  line-height:1.15;
+  font-weight:1000
+}
+
+.wallet-appointment-details{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:12px
+}
+
+.wallet-appointment-details span{
+  display:grid;
+  gap:2px;
+  border-radius:8px;
+  background:#dbeafe;
+  color:#1e3a8a;
+  font-size:8px;
+  font-weight:1000;
+  padding:7px
+}
+
+.wallet-appointment-details b{
+  color:#0f172a;
+  font-size:13px;
+  font-weight:1000
+}
+
+.wallet-appointment-footer{
+  display:flex;
+  justify-content:space-between;
+  align-items:end;
+  margin-top:10px
+}
+
+.wallet-appointment-footer span{
+  color:#334155;
+  font-size:9px;
+  font-weight:1000
+}
+
+.wallet-appointment-footer i{
+  width:24px;
+  height:24px;
+  border-radius:4px;
+  background:
+    linear-gradient(90deg,#0f172a 50%,transparent 0) 0 0/8px 8px,
+    linear-gradient(#0f172a 50%,transparent 0) 0 0/8px 8px,
+    #fff;
+  border:2px solid #0f172a
+}
+
+@keyframes wallet-fan{
+  from{
+    opacity:0;
+    transform:translateX(-50%) translateY(26px) rotate(0deg) scale(.84)
+  }
+}
+
+.learn-wallet-selected,
+.learn-wallet-hint{
+  border-radius:10px;
+  background:#fff;
+  padding:8px 10px
+}
+
+.learn-wallet-selected{
+  display:grid;
+  gap:3px
+}
+
+.learn-wallet-selected span{
+  color:#92400e;
+  font-size:10px;
+  font-weight:900
+}
+
+.learn-wallet-selected strong{
+  color:#111827;
+  font-size:14px
+}
+
+.learn-wallet-selected p,
+.learn-wallet-hint{
+  color:#334155;
+  font-size:12px!important;
+  line-height:1.3
 }
 
 .learn-answer-btn{
@@ -5227,6 +6011,458 @@ select:disabled {
   color: #ffffff;
 }
 
+/* Past session report cards */
+.past-dashboard {
+  display: grid;
+  gap: 16px;
+  color: #0f172a;
+}
+
+.past-dashboard-header {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(420px, 0.9fr);
+  gap: 16px;
+  align-items: end;
+}
+
+.past-dashboard-header span,
+.profile-tile-kicker,
+.report-panel-title span {
+  color: #0f62b6;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.past-dashboard-header h3,
+.profile-report-head h3,
+.report-panel-title h4 {
+  margin: 4px 0;
+  color: #111827;
+}
+
+.past-dashboard-header p,
+.profile-report-head p,
+.report-panel-title p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.past-filter-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.past-filter-row label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.past-filter-row label span {
+  color: #334155;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.past-filter-row select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  font-weight: 800;
+}
+
+.profile-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.profile-tile {
+  display: grid;
+  gap: 8px;
+  min-height: 168px;
+  text-align: left;
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 14px;
+  color: #0f172a;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.profile-tile.selected {
+  border-color: #0f62b6;
+  box-shadow: 0 0 0 3px rgba(15, 98, 182, 0.16), 0 14px 26px rgba(15, 23, 42, 0.08);
+}
+
+.profile-tile strong {
+  color: #0f376b;
+  font-size: 20px;
+}
+
+.profile-tile em,
+.profile-tile small {
+  color: #475569;
+  font-style: normal;
+}
+
+.profile-tile-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-tile-stats span {
+  display: grid;
+  gap: 2px;
+  border-radius: 8px;
+  background: #eef6ff;
+  color: #334155;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.profile-tile-stats b {
+  color: #0f376b;
+  font-size: 16px;
+}
+
+.profile-report-shell {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d7deea;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.profile-report-head {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.profile-report-head span {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.report-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-radius: 10px;
+  background: #e2e8f0;
+  padding: 6px;
+}
+
+.report-tab-row button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #1e293b;
+  padding: 0 14px;
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.report-tab-row button.active {
+  background: #ffffff;
+  color: #0f62b6;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.report-card-two-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-summary-panel,
+.mode-report-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.report-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.report-kpi-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.report-kpi-grid div {
+  display: grid;
+  gap: 4px;
+  border-radius: 9px;
+  background: #eef6ff;
+  padding: 12px;
+}
+
+.report-kpi-grid span,
+.mode-table-list span,
+.attempt-metric-strip span {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-kpi-grid strong {
+  color: #0f376b;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.report-kpi-grid em {
+  color: #475569;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.app-ability-list,
+.cognition-row-list,
+.mode-table-list,
+.attempt-row-list {
+  display: grid;
+  gap: 8px;
+}
+
+.app-ability-list > div {
+  display: grid;
+  grid-template-columns: 110px 1fr 62px;
+  gap: 10px;
+  align-items: center;
+  color: #0f172a;
+}
+
+.app-ability-list span,
+.cognition-row-list strong {
+  font-weight: 900;
+}
+
+.app-ability-list div div {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.app-ability-list i {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: #0f62b6;
+}
+
+.app-ability-list strong {
+  text-align: right;
+  color: #0f376b;
+}
+
+.cognition-row-list > div,
+.mode-table-list > div {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+}
+
+.cognition-row-list span,
+.mode-table-list strong {
+  color: #0f376b;
+  font-weight: 900;
+}
+
+.cognition-row-list em {
+  color: #475569;
+  font-style: normal;
+  text-align: right;
+}
+
+.attempt-row-list article {
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.attempt-row-list article > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 160px minmax(180px, 1fr) minmax(180px, auto);
+  gap: 12px;
+  align-items: center;
+  border: 0;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 12px;
+  text-align: left;
+}
+
+.attempt-row-list article > button span,
+.attempt-row-list article > button em {
+  color: #475569;
+  font-style: normal;
+}
+
+.attempt-row-list article > button strong {
+  color: #0f376b;
+}
+
+.attempt-detail-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #d7deea;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.attempt-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.attempt-metric-strip div {
+  display: grid;
+  gap: 4px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.attempt-metric-strip strong {
+  color: #0f376b;
+}
+
+.attempt-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.attempt-evidence-grid section {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.attempt-evidence-grid h5 {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+}
+
+.attempt-evidence-grid section > div {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 4px 8px;
+  border: 1px solid #d7deea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.attempt-evidence-grid section > div.done {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.attempt-evidence-grid section > div.prompt-used {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.attempt-evidence-grid section > div span {
+  grid-row: span 2;
+  align-self: start;
+  justify-self: center;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #166534;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.attempt-evidence-grid section > div.done span {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.attempt-evidence-grid section > div.prompt-used span {
+  background: #0f62b6;
+  color: #ffffff;
+}
+
+.attempt-evidence-grid section > div.prompt-used span::before {
+  content: "?";
+}
+
+.attempt-evidence-grid strong {
+  color: #0f172a;
+}
+
+.attempt-evidence-grid em {
+  color: #475569;
+  font-size: 12px;
+  font-style: normal;
+}
+
+@media (max-width: 980px) {
+  .past-dashboard-header,
+  .profile-report-head,
+  .report-card-two-panel,
+  .attempt-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .past-filter-row,
+  .report-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .attempt-row-list article > button {
+    grid-template-columns: 1fr;
+  }
+
+  .cognition-row-list > div,
+  .mode-table-list > div {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Admin monitoring console */
 .clinical-workspace.with-panel {
   display: block;
@@ -6148,6 +7384,15 @@ select:disabled {
   padding: 0 9px;
 }
 
+.account-grid .account-delete-btn {
+  width: 36px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 18px;
+}
+
 .admin-inline-form,
 .push-grid,
 .scenario-form {
@@ -6654,6 +7899,79 @@ select:disabled {
   color: #0f376b;
 }
 
+.patient-session-chip button {
+  min-height: 28px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eef6ff;
+  color: #0f376b;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.logout-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(8px);
+}
+
+.logout-confirm-overlay > div {
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d7deea;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #111827;
+  padding: 22px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+}
+
+.logout-confirm-overlay span {
+  color: #0f62b6;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.logout-confirm-overlay strong {
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.logout-confirm-overlay p {
+  color: #334155;
+}
+
+.logout-confirm-overlay div div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.logout-confirm-overlay button {
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #0f376b;
+  font-weight: 900;
+}
+
+.logout-confirm-overlay button.danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+}
+
 .join-card form {
   grid-template-columns: 1fr 120px 92px;
 }
@@ -6742,5 +8060,556 @@ select:disabled {
   .progress-summary-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* Figma Make-inspired Singpass mock */
+.singpass-app.singpass-dark{height:100%;display:flex;flex-direction:column;overflow:hidden;border-radius:26px;background:#000;color:#fff;font-family:Inter,Arial,sans-serif}
+.singpass-scroll{flex:1;min-height:0;overflow:auto;padding:0 16px 92px;background:#000}
+.singpass-status{display:flex;align-items:center;justify-content:space-between;padding:14px 4px 8px;color:#fff;font-size:14px;font-weight:800}
+.singpass-status div{display:flex;align-items:center;gap:7px}
+.signal-bars{width:15px;height:12px;display:inline-block;background:linear-gradient(to top,#fff 0 35%,transparent 35%),linear-gradient(to top,#fff 0 62%,transparent 62%),linear-gradient(to top,#fff 0 100%,transparent 100%);background-size:3px 100%,3px 100%,3px 100%;background-position:0 0,6px 0,12px 0;background-repeat:no-repeat}
+.battery{min-width:29px;height:20px;display:inline-grid;place-items:center;border-radius:8px;background:#61e056;color:#06110b;font-size:12px;font-weight:900}
+.singpass-welcome,.singpass-page-head,.singpass-scan-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:8px 0 16px}
+.singpass-welcome p{color:#8b8b8b;font-size:15px;margin:0 0 2px}
+.singpass-welcome h1,.singpass-page-head h1{color:#fff;font-size:28px;line-height:1.08;margin:0;font-weight:900}
+.singpass-round-btn{width:38px;height:38px;display:grid;place-items:center;border:1px solid #2e2e2e;border-radius:50%;background:#1a1a1a;color:#888;font-size:16px;font-weight:900}
+.singpass-pending-banner,.singpass-login-shortcut,.singpass-dark-card,.singpass-hidden-card,.singpass-scan-card,.singpass-result-card,.singpass-approval-hero{display:grid;gap:8px;border:1px solid #2a2a2a;border-radius:20px;background:#121212;color:#fff;padding:16px;text-align:left}
+.singpass-pending-banner{width:100%;border-color:rgba(224,92,82,.65);background:linear-gradient(135deg,#2a0a0a,#131313);margin-bottom:14px}
+.singpass-pending-banner span,.singpass-login-shortcut span,.singpass-approval-hero p,.singpass-result-card p{color:#e05c52;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.singpass-pending-banner strong,.singpass-login-shortcut strong{color:#fff;font-size:18px;font-weight:900}
+.singpass-pending-banner em{color:#bdbdbd;font-style:normal;font-weight:800}
+.singpass-card-tabs{display:flex;gap:8px;overflow:auto;padding:2px 0 14px}
+.singpass-card-tabs button{flex:0 0 auto;min-height:38px;border:1px solid #2e2e2e;border-radius:999px;background:#111;color:#8b8b8b;padding:0 13px;font-size:13px;font-weight:800}
+.singpass-card-tabs button.active{border-color:#e05c52;background:rgba(224,92,82,.12);color:#e05c52}
+.singpass-identity-card{position:relative;overflow:hidden;display:grid;gap:15px;min-height:258px;border-radius:22px;padding:18px;border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 40px rgba(0,0,0,.45)}
+.singpass-identity-card.nric{background:linear-gradient(135deg,#b3172a 0%,#67101b 100%)}
+.singpass-identity-card.licence{background:linear-gradient(135deg,#17243d 0%,#070b14 100%)}
+.singpass-identity-card.chas{background:linear-gradient(135deg,#185bd7 0%,#0d245e 100%)}
+.sg-header{display:flex;align-items:center;gap:10px}
+.sg-header strong{display:block;color:#fff;font-size:16px;font-weight:900}
+.sg-header span{color:rgba(255,255,255,.72);font-size:12px;font-weight:800}
+.sg-flag{width:42px;height:28px;display:grid;align-items:start;border-radius:5px;overflow:hidden;background:#fff}
+.sg-flag span{height:14px;background:#e51b2b}
+.licence-badge{min-width:56px;height:28px;display:grid;place-items:center;border-radius:999px;background:rgba(255,255,255,.16);color:#fff!important;font-size:12px!important}
+.id-body{display:grid;grid-template-columns:78px 1fr;gap:14px;align-items:start}
+.photo-placeholder{width:78px;height:94px;display:grid;place-items:center;border-radius:16px;background:rgba(255,255,255,.18);color:#fff;font-size:22px;font-weight:900}
+.id-body h2{color:#fff;margin:0 0 6px;font-size:20px;line-height:1.15;font-weight:900}
+.id-body p{color:rgba(255,255,255,.78);margin:0 0 12px;font-size:14px;font-weight:800}
+.id-body dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
+.id-body dl div{display:grid;gap:2px}
+.id-body dt{color:rgba(255,255,255,.56);font-size:10px;font-weight:900;text-transform:uppercase}
+.id-body dd{color:#fff;margin:0;font-size:13px;font-weight:900}
+.singpass-identity-card footer{color:rgba(255,255,255,.75);font-size:12px;font-weight:800}
+.singpass-hidden-card{min-height:150px;place-content:center;text-align:center}
+.singpass-hidden-card strong{color:#fff;font-size:19px}.singpass-hidden-card span{color:#aaa}
+.singpass-barcode-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;margin:14px 0;border:1px solid #2a2a2a;border-radius:16px;background:#141414;color:#e05c52;font-size:15px;font-weight:900}
+.barcode-lines{width:34px;height:22px;display:inline-block;background:repeating-linear-gradient(90deg,#e05c52 0 2px,transparent 2px 5px,#e05c52 5px 8px,transparent 8px 12px)}
+.singpass-profile-grid,.singpass-service-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.singpass-profile-grid button,.singpass-service-grid button{min-height:95px;display:grid;align-content:center;gap:5px;border:1px solid #262626;border-radius:16px;background:#101010;color:#fff;padding:12px;text-align:left}
+.singpass-profile-grid button span,.singpass-service-grid button span{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:#241515;color:#e05c52;font-weight:900}
+.singpass-profile-grid button strong,.singpass-service-grid button strong{color:#fff;font-size:14px;line-height:1.2}
+.singpass-profile-grid button em{color:#777;font-size:12px;font-style:normal}
+.singpass-section-title{display:flex;justify-content:space-between;align-items:center;margin:20px 0 10px}
+.singpass-section-title strong{color:#fff;font-size:17px;font-weight:900}
+.singpass-section-title button,.singpass-link-btn{border:none;background:transparent;color:#e05c52;font-weight:900}
+.singpass-login-shortcut{width:100%;margin-top:14px}
+.singpass-bottom-nav{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:9px 8px 20px;border-top:1px solid #1e1e1e;background:rgba(14,14,14,.98);backdrop-filter:blur(20px)}
+.singpass-bottom-nav button{min-height:54px;display:grid;place-items:center;gap:1px;border:none;border-radius:14px;background:transparent;color:#666;font-weight:800}
+.singpass-bottom-nav button.active{background:rgba(224,92,82,.12);color:#e05c52}
+.singpass-bottom-nav button span{font-size:19px;line-height:1}
+.singpass-bottom-nav button strong{color:inherit;font-size:11px}
+.singpass-topbar{min-height:58px;display:grid;grid-template-columns:42px 1fr 42px;gap:8px;align-items:center;padding:12px 14px 6px;background:#000}
+.singpass-topbar button{width:38px;height:38px;border:1px solid #2e2e2e;border-radius:50%;background:#151515;color:#fff;font-size:18px;font-weight:900}
+.singpass-topbar strong{color:#fff;text-align:center;font-size:17px;font-weight:900}
+.singpass-approval-hero{margin-top:14px;text-align:center;justify-items:center}
+.singpass-approval-hero h2,.singpass-result-card h2,.singpass-login-screen h1,.singpass-scan-card h2{color:#fff;margin:0;font-size:25px;font-weight:900}
+.singpass-approval-hero span,.singpass-result-card span,.singpass-login-screen p,.singpass-scan-card p,.singpass-sheet p{color:#aaa;margin:0;line-height:1.45}
+.singpass-auth-mark{width:58px;height:58px;display:grid;place-items:center;border-radius:20px;background:#e05c52;color:#fff;font-weight:900}
+.singpass-detail-row{display:grid;grid-template-columns:94px 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #282828}
+.singpass-detail-row:last-child{border-bottom:none}
+.singpass-detail-row span{color:#888;font-size:12px;font-weight:900;text-transform:uppercase}
+.singpass-detail-row strong{color:#fff;font-size:17px;line-height:1.25}
+.singpass-action-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.singpass-primary-btn,.singpass-secondary-btn{min-height:50px;border:none;border-radius:14px;color:#fff;font-size:16px;font-weight:900}
+.singpass-primary-btn{background:#e05c52}.singpass-secondary-btn{background:#2a2a2a}
+.singpass-login-screen{display:grid;align-content:start;gap:14px;padding-top:36px}
+.singpass-brand-lock{width:68px;height:68px;display:grid;place-items:center;border-radius:20px;background:#e05c52}
+.singpass-brand-lock span{color:#fff;font-size:25px;font-weight:900}
+.singpass-login-panel{display:grid;gap:13px;margin-top:8px;border:1px solid #2a2a2a;border-radius:20px;background:#121212;padding:16px}
+.singpass-login-panel label{display:grid;gap:7px}
+.singpass-login-panel label span{color:#bbb;font-size:13px;font-weight:900}
+.singpass-login-panel input,.singpass-search input{width:100%;min-height:48px;border:1px solid #2e2e2e;border-radius:13px;background:#050505;color:#fff;padding:0 13px;font-size:16px;font-weight:900;box-sizing:border-box}
+.singpass-result-card{margin-top:24px;justify-items:center;text-align:center}
+.singpass-result-card.approved .singpass-auth-mark{background:#14a45d}.singpass-result-card.rejected .singpass-auth-mark{background:#e05c52}
+.singpass-scan{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:0 16px 92px;background:radial-gradient(circle at 50% 38%,#1b1b2a 0,#050505 62%,#000 100%)}
+.singpass-scan.success{background:radial-gradient(circle at 50% 38%,#082818 0,#050505 70%)}.singpass-scan.invalid{background:radial-gradient(circle at 50% 38%,#2a0a0a 0,#050505 70%)}
+.singpass-scan-head strong{color:#fff;font-size:15px}
+.singpass-scan-frame{position:relative;width:240px;height:240px;display:grid;place-items:center;margin:44px auto 28px;border:1px solid rgba(255,255,255,.18);border-radius:20px;background:rgba(255,255,255,.04)}
+.singpass-scan-frame .corner{position:absolute;width:38px;height:38px;border-color:#e05c52}
+.singpass-scan-frame .tl{left:-2px;top:-2px;border-top:4px solid;border-left:4px solid;border-top-left-radius:18px}
+.singpass-scan-frame .tr{right:-2px;top:-2px;border-top:4px solid;border-right:4px solid;border-top-right-radius:18px}
+.singpass-scan-frame .bl{left:-2px;bottom:-2px;border-bottom:4px solid;border-left:4px solid;border-bottom-left-radius:18px}
+.singpass-scan-frame .br{right:-2px;bottom:-2px;border-bottom:4px solid;border-right:4px solid;border-bottom-right-radius:18px}
+.singpass-scan-frame strong{color:#fff;font-size:22px;font-weight:900}
+.scan-line{position:absolute;left:8px;right:8px;top:40px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#e05c52,transparent);animation:singpass-scan-line 1s linear infinite}
+@keyframes singpass-scan-line{from{transform:translateY(0)}to{transform:translateY(158px)}}
+.singpass-scan-card div{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.singpass-search{position:relative;display:block;margin-bottom:12px}.singpass-search span{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#666;font-size:13px;font-weight:900}.singpass-search input{padding-left:68px}
+.singpass-inbox-tabs{display:flex;gap:8px;overflow:auto;margin-bottom:12px}
+.singpass-inbox-tabs button{flex:0 0 auto;min-height:34px;border:1px solid #2a2a2a;border-radius:999px;background:#111;color:#888;padding:0 12px;font-weight:900}
+.singpass-inbox-tabs button.active{border-color:#e05c52;color:#e05c52;background:rgba(224,92,82,.12)}
+.singpass-message-list{display:grid;gap:10px}
+.singpass-message-row{width:100%;display:grid;grid-template-columns:44px 1fr auto;gap:11px;align-items:start;border:1px solid #252525;border-radius:16px;background:#101010;color:#fff;padding:13px;text-align:left}
+.singpass-message-row.unread{border-color:rgba(224,92,82,.45)}
+.agency-dot{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:#2a0a0a;color:#e05c52;font-weight:900}
+.singpass-message-row strong{color:#fff;font-size:15px}.singpass-message-row p{color:#aaa;margin:3px 0;font-size:13px;line-height:1.35}.singpass-message-row em,.singpass-message-row time{color:#666;font-size:12px;font-style:normal;font-weight:800}
+.singpass-modal-backdrop,.singpass-sheet-backdrop{position:absolute;inset:0;z-index:60;display:grid;place-items:center;background:rgba(0,0,0,.76);backdrop-filter:blur(18px)}
+.singpass-barcode-modal{width:min(86%,330px);display:grid;gap:12px;justify-items:center;border-radius:24px;background:#fff;color:#111;padding:18px;text-align:center}
+.singpass-barcode-modal button{justify-self:end;border:none;background:transparent;color:#e05c52;font-weight:900}
+.singpass-barcode-modal h2{margin:0;color:#111;font-size:21px;font-weight:900}.singpass-barcode-modal p,.singpass-barcode-modal span{color:#555;margin:0;font-weight:800}
+.barcode-large{width:220px;height:96px;background:repeating-linear-gradient(90deg,#111 0 3px,transparent 3px 7px,#111 7px 13px,transparent 13px 18px)}
+.singpass-sheet-backdrop{align-items:end}
+.singpass-sheet{width:100%;display:grid;gap:10px;border-radius:24px 24px 0 0;border:1px solid #2a2a2a;border-bottom:none;background:#121212;color:#fff;padding:10px 16px 24px}
+.sheet-handle{width:44px;height:5px;justify-self:center;border-radius:999px;background:#3a3a3a}
+.singpass-sheet h2{color:#fff;margin:4px 0 6px;font-size:22px;font-weight:900}
+.singpass-sheet button{min-height:48px;border:1px solid #2a2a2a;border-radius:14px;background:#1a1a1a;color:#fff;font-weight:900;text-align:left;padding:0 14px}
+.singpass-sheet button.danger{color:#ff8f87}
+.singpass-sheet.service{justify-items:start}
+.service-icon-lg{width:66px;height:66px;display:grid;place-items:center;border-radius:20px;font-size:16px;font-weight:900}
+
+.free-stimulus-panel{
+  gap:12px;
+}
+
+.free-push-grid{
+  grid-template-columns:1fr 1fr 1fr;
+}
+
+.free-message-field{
+  display:grid;
+  gap:6px;
+}
+
+.free-message-field span{
+  color:#344054;
+  font-size:12px;
+  font-weight:900;
+}
+
+.free-message-field textarea,
+.free-message-field input{
+  width:100%;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  background:#fff;
+  color:#111827;
+  padding:10px 12px;
+  font:inherit;
+  font-weight:700;
+  box-sizing:border-box;
+}
+
+.free-message-field textarea{
+  resize:vertical;
+  min-height:82px;
+}
+
+.free-task-card{
+  width:min(540px,calc(100vw - 40px));
+  align-self:center;
+  display:grid;
+  gap:14px;
+  border:3px solid #90caf9;
+  border-radius:22px;
+  background:#ffffff;
+  color:#0f172a;
+  padding:24px;
+  box-shadow:0 18px 44px rgba(15,23,42,.12);
+}
+
+.free-task-card > span{
+  color:#0f62b6;
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+.free-task-card > strong{
+  color:#0f172a;
+  font-size:28px;
+  line-height:1.1;
+}
+
+.free-task-message,
+.free-task-instructions{
+  display:grid;
+  gap:6px;
+  border:1px solid #bfdbfe;
+  border-radius:14px;
+  background:#eff6ff;
+  padding:14px;
+}
+
+.free-task-message b,
+.free-task-instructions b{
+  color:#0f376b;
+  font-size:15px;
+}
+
+.free-task-message p,
+.free-task-instructions p{
+  color:#1f2937;
+  font-size:18px;
+  line-height:1.35;
+}
+
+.free-task-card button{
+  min-height:52px;
+  border:none;
+  border-radius:14px;
+  background:#0f62b6;
+  color:#ffffff;
+  font-size:18px;
+  font-weight:900;
+}
+
+.free-input-manager,
+.free-monitor-list{
+  display:grid;
+  gap:10px;
+}
+
+.free-input-manager > strong{
+  color:#111827;
+  font-size:16px;
+}
+
+.free-input-row,
+.free-monitor-card{
+  display:grid;
+  gap:8px;
+  border:1px solid #d7deea;
+  border-radius:12px;
+  background:#ffffff;
+  color:#111827;
+  padding:12px;
+}
+
+.free-input-row{
+  grid-template-columns:auto 1fr auto;
+  align-items:start;
+}
+
+.free-input-row > span,
+.free-monitor-card header span{
+  border-radius:999px;
+  background:#eef6ff;
+  color:#0f62b6;
+  padding:5px 8px;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+
+.free-input-row strong,
+.free-monitor-card > strong{
+  color:#111827;
+  font-size:16px;
+}
+
+.free-input-row p,
+.free-monitor-card p,
+.free-monitor-card em,
+.free-input-row em{
+  color:#475569;
+  font-size:13px;
+  line-height:1.35;
+}
+
+.free-input-row button,
+.free-monitor-card header button{
+  min-height:34px;
+  border:1px solid #fecaca;
+  border-radius:9px;
+  background:#fff7f7;
+  color:#b42318;
+  padding:0 10px;
+  font-weight:900;
+}
+
+.free-monitor-card header,
+.free-monitor-card footer{
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  align-items:center;
+}
+
+.free-monitor-stats{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:8px;
+}
+
+.free-monitor-stats div{
+  display:grid;
+  gap:3px;
+  border-radius:10px;
+  background:#f8fafc;
+  padding:10px;
+}
+
+.free-monitor-stats span,
+.free-monitor-card footer span{
+  color:#64748b;
+  font-size:11px;
+  font-weight:800;
+}
+
+.free-monitor-stats strong{
+  color:#0f172a;
+  font-size:14px;
+}
+
+.singpass-app.singpass-dark{
+  border-radius:0;
+  background:#000;
+}
+
+.singpass-scroll{
+  padding:0 20px 94px;
+  background:#000;
+}
+
+.singpass-status{
+  padding:14px 0 8px;
+}
+
+.singpass-welcome{
+  padding:10px 0 0;
+}
+
+.singpass-welcome h1{
+  font-size:22px;
+  line-height:1.25;
+}
+
+.singpass-section-block{
+  padding:20px 0 0;
+}
+
+.singpass-section-title{
+  margin:0 0 14px;
+}
+
+.singpass-title-actions{
+  display:flex;
+  gap:14px;
+  align-items:center;
+}
+
+.singpass-title-actions button{
+  border:none;
+  background:transparent;
+  color:#888;
+  font-size:13px;
+  font-weight:800;
+}
+
+.singpass-card-tabs{
+  padding-bottom:4px;
+  margin-bottom:16px;
+}
+
+.singpass-card-tabs button{
+  min-height:36px;
+  padding:0 16px;
+}
+
+.singpass-identity-card{
+  min-height:230px;
+  border-radius:16px;
+  padding:20px;
+}
+
+.singpass-identity-card.nric{
+  background:linear-gradient(135deg,#1a1a2e 0%,#16213e 52%,#0f3460 100%);
+  border-color:#2e3a5c;
+}
+
+.singpass-identity-card.licence{
+  background:linear-gradient(135deg,#1a2e1a 0%,#0f2a0f 100%);
+  border-color:#2e5c2e;
+}
+
+.singpass-identity-card.chas{
+  background:linear-gradient(135deg,#1a1a3e 0%,#0f0f2e 100%);
+  border-color:#2e2e6e;
+}
+
+.sg-header{
+  justify-content:space-between;
+  margin-bottom:16px;
+}
+
+.sg-header strong{
+  font-size:10px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+.sg-header span{
+  font-size:9px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.id-body{
+  grid-template-columns:70px 1fr;
+}
+
+.id-body.single{
+  display:block;
+}
+
+.photo-placeholder{
+  width:70px;
+  height:86px;
+  border-radius:8px;
+}
+
+.id-body h2{
+  font-size:15px;
+  margin-bottom:10px;
+}
+
+.id-body dl{
+  grid-template-columns:1fr;
+  gap:6px;
+}
+
+.id-body dl div{
+  display:block;
+}
+
+.id-body dt{
+  display:inline;
+  margin-right:5px;
+  color:rgba(255,255,255,.42);
+  font-size:10px;
+  text-transform:none;
+}
+
+.id-body dd{
+  display:inline;
+  color:rgba(255,255,255,.86);
+  font-size:11px;
+}
+
+.singpass-identity-card footer{
+  margin-top:14px;
+  padding-top:10px;
+  border-top:1px solid rgba(255,255,255,.08);
+  text-align:center;
+  color:rgba(255,255,255,.22);
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+
+.singpass-barcode-btn{
+  margin:0;
+  border:none;
+  background:transparent;
+  min-height:54px;
+}
+
+.singpass-profile-strip{
+  display:flex;
+  gap:12px;
+  overflow-x:auto;
+  padding-bottom:6px;
+}
+
+.singpass-profile-strip button{
+  width:72px;
+  flex:0 0 72px;
+  display:grid;
+  justify-items:center;
+  gap:8px;
+  border:none;
+  background:transparent;
+  color:#aaa;
+  padding:0;
+}
+
+.singpass-profile-strip span{
+  width:60px;
+  height:60px;
+  display:grid;
+  place-items:center;
+  border:1.5px solid #2e2e2e;
+  border-radius:50%;
+  background:#1a1a1a;
+  color:#e05c52;
+  font-weight:900;
+}
+
+.singpass-profile-strip strong{
+  color:#aaa;
+  font-size:11px;
+  line-height:1.25;
+  white-space:pre-line;
+  text-align:center;
+}
+
+.singpass-favourites p{
+  margin:0 0 16px;
+  color:#555;
+  font-size:13px;
+  line-height:1.4;
+}
+
+.singpass-service-grid{
+  grid-template-columns:repeat(4,1fr);
+  gap:16px;
+}
+
+.singpass-service-grid button{
+  min-height:0;
+  display:grid;
+  justify-items:center;
+  gap:6px;
+  border:none;
+  background:transparent;
+  padding:0;
+  text-align:center;
+}
+
+.singpass-service-grid button span{
+  width:60px;
+  height:60px;
+  border-radius:16px;
+  font-size:12px;
+}
+
+.singpass-service-grid button strong{
+  color:#888;
+  font-size:11px;
+  line-height:1.25;
+  font-weight:700;
+}
+
+.singpass-view-all-shortcuts{
+  display:block;
+  margin:12px auto 0;
+  border:none;
+  background:transparent;
+  color:#e05c52;
+  padding:8px 16px;
+  font-size:15px;
+  font-weight:800;
 }
 
