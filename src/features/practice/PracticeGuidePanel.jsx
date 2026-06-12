@@ -3,6 +3,7 @@ import { getCurrentAssignment } from "../../state/sessionLifecycle";
 import { SCENARIO_LIBRARY } from "../../state/v2Assessment";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { isCorrectLearnAnswer } from "../learn/answerMatching";
+import { TASK_ANSWER_CHECKS } from "../taskAnswerChecks";
 import { completedStepsMap, firstIncompleteIndex, getDetectedPracticeStep, shouldCountPracticeMiss } from "./practiceProgress";
 import { buildPracticeGuide, flattenGuideSteps, getActivePracticePage } from "./practiceGuideUtils";
 import { APP_LABELS, COMPLETE_EVENTS, PRACTICE_GUIDES, PRACTICE_PAGE_OVERRIDES } from "./practiceGuides";
@@ -19,6 +20,14 @@ function getActiveScenario(state) {
   const assignment = getCurrentAssignment(state.session, userId, "practice");
   if (!assignment) return null;
   return SCENARIO_LIBRARY.find((scenario) => scenario.id === assignment.scenarioId) || null;
+}
+
+function getAnswerCheckIdForStep(step) {
+  return Object.values(TASK_ANSWER_CHECKS).find((check) => (
+    check.id === step?.answerCheckId
+    || check.practiceStepIds?.includes(step?.id)
+    || check.answers === step?.answers
+  ))?.id || "";
 }
 
 export function PracticeGuidePanel() {
@@ -156,8 +165,9 @@ export function PracticeGuidePanel() {
       return;
     }
     const correct = isCorrectLearnAnswer(answerValue, activeStep.answers);
+    const answerCheckId = getAnswerCheckIdForStep(activeStep);
     setAnswerStatus(correct ? "correct" : "wrong");
-    trackPracticeAnswer(activeStep.id, correct);
+    trackPracticeAnswer(activeStep.id, correct, answerCheckId);
     if (correct) {
       completePracticeStep(activeStep);
       return;

@@ -352,6 +352,24 @@ export function CalendarApp() {
     return next;
   }
 
+  function dispatchCalendarFormChange(target, nextForm) {
+    const dateParts = parseDateInput(nextForm.date) || editorDate;
+    const detail = {
+      eventType: "change",
+      target,
+      dateParts,
+      form: nextForm,
+    };
+    window.dispatchEvent(new CustomEvent("virtual-os-learn-step-action", { detail }));
+    window.dispatchEvent(new CustomEvent("virtual-os-guide-step-action", { detail }));
+  }
+
+  function updateCalendarForm(patch, target) {
+    const nextForm = { ...form, ...patch };
+    setForm(nextForm);
+    dispatchCalendarFormChange(target, nextForm);
+  }
+
   if (editorDate !== null) {
     const dayEvents = eventsByKey[keyFor(editorDate.year, editorDate.month, editorDate.date)] || [];
     const canEditDateAndTime = true;
@@ -369,7 +387,7 @@ export function CalendarApp() {
           className="title-input"
           placeholder="Add title"
           value={form.title}
-          onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
+          onChange={(e) => updateCalendarForm({ title: e.target.value }, e.currentTarget)}
         />
 
         <div className="type-row">
@@ -407,7 +425,7 @@ export function CalendarApp() {
               currentYear={currentDate.getFullYear()}
               onChoosePart={updateDatePart}
             />
-            <input className="time-edit" type="time" value={form.start} disabled={!canEditDateAndTime} onChange={(e) => setForm((p) => ({ ...p, start: e.target.value }))} />
+            <input className="time-edit" type="time" value={form.start} disabled={!canEditDateAndTime} onChange={(e) => updateCalendarForm({ start: e.target.value }, e.currentTarget)} />
           </div>
           <div className="line between">
             <DateWheelFields
@@ -417,7 +435,7 @@ export function CalendarApp() {
               currentYear={currentDate.getFullYear()}
               onChoosePart={updateDatePart}
             />
-            <input className="time-edit" type="time" value={form.end} disabled={!canEditDateAndTime} onChange={(e) => setForm((p) => ({ ...p, end: e.target.value }))} />
+            <input className="time-edit" type="time" value={form.end} disabled={!canEditDateAndTime} onChange={(e) => updateCalendarForm({ end: e.target.value }, e.currentTarget)} />
           </div>
           <div className="line"><span>Singapore Standard Time</span></div>
           <div className="line"><span>Does not repeat</span></div>

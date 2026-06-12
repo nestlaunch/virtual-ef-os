@@ -5,7 +5,7 @@ import { formalThreads, weeklyRules, whatsappThreads } from "../../state/seedDat
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { PRACTICE_GUIDES, PRACTICE_PAGE_OVERRIDES } from "../practice/practiceGuides";
 import { buildPracticeGuide, flattenGuideSteps } from "../practice/practiceGuideUtils";
-import { getDoctorAppointmentTarget } from "../taskAnswerChecks";
+import { getDoctorAppointmentTarget, getTaskAnswerIds } from "../taskAnswerChecks";
 import { checkRecordCriterion, filterRecordItems, getAppCompetency, getAssessmentMetric, getCognitiveReportRows, getCriterionDomain, getCriterionEvidenceDetail, getFunctionalCompletion, getScenarioForRecord, getTaskAnswerAccuracy, percentChange } from "./recordsMetrics";
 
 const QUICK_CUES = [
@@ -1274,6 +1274,18 @@ function hasLogKind(state, kind, accountId = null) {
   ));
 }
 
+function hasCorrectTaskAnswer(state, ids, accountId = null) {
+  const idSet = new Set(ids);
+  return state.hiddenLog.some((entry) => (
+    (!accountId || !entry.accountId || entry.accountId === accountId)
+    && (
+      (entry.kind === "practice_answer" && (idSet.has(entry.stepId) || idSet.has(entry.answerCheckId)))
+      || (entry.kind === "assessment_answer" && idSet.has(entry.checkId))
+    )
+    && entry.correct
+  ));
+}
+
 function hasClickTarget(state, targetText, accountId = null) {
   const needle = text(targetText);
   return state.hiddenLog.some((entry) => (
@@ -1326,7 +1338,11 @@ function checkAssessmentCriterion(state, criterion, accountId = null) {
   if (c.includes("open singpass")) return { done: hasOpenedApp(state, "singpass", accountId), evidence: "Singpass opened" };
   if (c.includes("open family")) return { done: hasClickTarget(state, "family", accountId) || hasOpenedApp(state, "whatsapp", accountId), evidence: "Family/WhatsApp opened" };
   if (c.includes("doctor") || c.includes("read doctor") || c.includes("identify")) {
-    return { done: hasClickTarget(state, "sms-doctor", accountId) || hasClickTarget(state, "doctor", accountId) || hasPsychiatryCalendarEntry(state, accountId), evidence: "Doctor appointment information accessed or used" };
+    const answered = hasCorrectTaskAnswer(state, getTaskAnswerIds("appointmentDetails"), accountId);
+    return {
+      done: answered || hasClickTarget(state, "sms-doctor", accountId) || hasClickTarget(state, "doctor", accountId) || hasPsychiatryCalendarEntry(state, accountId),
+      evidence: answered ? "Appointment details answer correct" : "Doctor appointment information accessed or used",
+    };
   }
   if (c.includes("psychiatry") || c.includes("save appointment") || c.includes("save event") || /\bset\s+\d{1,2}\s+[a-z]{3}/i.test(c) || c.includes("set 3:00")) {
     return { done: hasPsychiatryCalendarEntry(state, accountId), evidence: "Matching psychiatry calendar entry found" };

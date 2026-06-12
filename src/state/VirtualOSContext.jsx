@@ -1652,7 +1652,16 @@ function reducer(state, action) {
           },
         },
       };
-      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "practice_answer", accountId, stepId: action.stepId, correct: Boolean(action.correct) }) });
+      return persistSessionState({
+        ...next,
+        hiddenLog: appendLog(next, {
+          kind: "practice_answer",
+          accountId,
+          stepId: action.stepId,
+          answerCheckId: action.answerCheckId || "",
+          correct: Boolean(action.correct),
+        }),
+      });
     }
     case "ADD_CUSTOM_SCENARIO": {
       const scenario = {
@@ -2017,7 +2026,7 @@ export function VirtualOSProvider({ children }) {
       trackPracticeStep: (stepId, isComplete) => dispatch({ type: "TRACK_PRACTICE_STEP", stepId, isComplete }),
       trackPracticePrompt: (level, prompt = {}) => dispatch({ type: "TRACK_PRACTICE_PROMPT", level, ...prompt }),
       trackPracticeWrongStep: () => dispatch({ type: "TRACK_PRACTICE_WRONG_STEP" }),
-      trackPracticeAnswer: (stepId, correct) => dispatch({ type: "TRACK_PRACTICE_ANSWER", stepId, correct }),
+      trackPracticeAnswer: (stepId, correct, answerCheckId = "") => dispatch({ type: "TRACK_PRACTICE_ANSWER", stepId, correct, answerCheckId }),
       addCustomScenario: (scenario) => dispatch({ type: "ADD_CUSTOM_SCENARIO", scenario }),
       pushCustomStimulus: (stimulus) => dispatch({ type: "PUSH_CUSTOM_STIMULUS", ...stimulus }),
       removeCustomStimulus: (stimulusId) => dispatch({ type: "REMOVE_CUSTOM_STIMULUS", stimulusId }),

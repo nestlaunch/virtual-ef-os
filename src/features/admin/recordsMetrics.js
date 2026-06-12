@@ -25,7 +25,7 @@ function recordClicked(item, target) {
 function taskAnswersForIds(item, ids) {
   const idSet = new Set(ids);
   return getRecordActions(item).filter((entry) => (
-    (entry.kind === "practice_answer" && idSet.has(entry.stepId))
+    (entry.kind === "practice_answer" && (idSet.has(entry.stepId) || idSet.has(entry.answerCheckId)))
     || (entry.kind === "assessment_answer" && idSet.has(entry.checkId))
   ));
 }

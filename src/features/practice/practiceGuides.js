@@ -274,6 +274,18 @@ export const APP_LABELS = {
 };
 
 export function isPracticeDateTimeSet(event, { date = doctorDateParts.date, month = doctorDateParts.month, year = doctorDateParts.year, start, end }) {
+  const form = event.detail?.form;
+  if (form?.date) {
+    const formDate = form.date.split("-").map(Number);
+    const formYear = formDate[0];
+    const formMonth = formDate[1] - 1;
+    const formDay = formDate[2];
+    return formDay === date
+      && formMonth === month
+      && formYear === year
+      && form.start === start
+      && form.end === end;
+  }
   const dateParts = event.detail?.dateParts;
   const dateReady = dateParts
     ? dateParts.date === date && dateParts.month === month && dateParts.year === year
