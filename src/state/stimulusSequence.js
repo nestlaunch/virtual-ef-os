@@ -40,7 +40,7 @@ export const STIMULUS_SEQUENCE = [
     app: "sms",
     threadId: "bank",
     delayMs: 36000,
-    title: "DBS Bank",
+    title: "Sunrise Bank",
     encouragement: "Pause and identify the safety warning.",
   },
   {

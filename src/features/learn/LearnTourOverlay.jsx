@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useVirtualOS } from "../../state/VirtualOSContext";
+import { GuideCursor } from "../system/GuideCursor";
 import { LEARN_MODULES, LEARN_SEQUENCE, getLearnAppLabel, getLearnSelectors, getStepAnswers } from "./learnModules";
 
 const WALLET_CARDS = [
@@ -24,8 +25,8 @@ const WALLET_CARDS = [
     id: "bank",
     label: "Bank",
     kind: "bank",
-    issuer: "POSB",
-    title: "POSB Debit Card",
+    issuer: "Sunrise Bank",
+    title: "Sunrise Debit Card",
     name: "AMIR HASSAN",
     primaryLabel: "Account",
     primaryValue: "034-1-22-908",
@@ -140,6 +141,9 @@ export function getAssignedLearnApp(state) {
 
 export function getLearnModuleForState(state) {
   const assignedApp = getAssignedLearnApp(state);
+  if (assignedApp === "home") {
+    return LEARN_MODULES.home;
+  }
   if (assignedApp === "bank" && state.currentApp === "singpass") {
     return LEARN_MODULES.bank;
   }
@@ -197,12 +201,16 @@ export function LearnTourOverlay() {
   const [learnData, setLearnData] = useState({});
   const [walletOpen, setWalletOpen] = useState(false);
   const [selectedWalletCard, setSelectedWalletCard] = useState("");
+  const [blockedMessage, setBlockedMessage] = useState("");
+  const cardRef = useRef(null);
   const userId = state.session.currentUserId;
   const assignedApp = getAssignedLearnApp(state);
   const learnAssignmentId = userId
     ? state.session.assignments?.[userId]?.filter((item) => item.mode === "learn").at(-1)?.id
     : null;
-  const guide = assignedApp === "bank" && state.currentApp === "singpass"
+  const guide = assignedApp === "home"
+    ? LEARN_MODULES.home
+    : assignedApp === "bank" && state.currentApp === "singpass"
     ? LEARN_MODULES.bank
     : assignedApp && state.currentApp === assignedApp ? LEARN_MODULES[assignedApp] : null;
   const activeStep = guide?.steps[stepIndex] || guide?.steps[0] || null;
@@ -210,7 +218,16 @@ export function LearnTourOverlay() {
   const answers = getStepAnswers(activeStep, learnData);
   const learnMetrics = state.learnMetrics?.byAccount?.[userId] || state.learnMetrics;
   const isFinalLearnModule = LEARN_SEQUENCE.indexOf(assignedApp) === LEARN_SEQUENCE.length - 1;
-  const canAdvance = stepReady || Boolean(completedSteps[activeStepKey]);
+  const isTeachingStep = Boolean(activeStep?.teaching) || Boolean(activeStep && !activeStep.question && !activeStep.advanceOn && !activeStep.completeEvent);
+  const isKnowledgeStep = Boolean(activeStep?.question);
+  const learnPartLabel = isKnowledgeStep ? "Part 2: Knowledge check" : "Part 1: App purpose";
+  const canAdvance = isTeachingStep || stepReady || Boolean(completedSteps[activeStepKey]);
+  const phoneInteractionPaused = isTeachingStep || isKnowledgeStep || canAdvance;
+  const phoneBlockedMessage = isKnowledgeStep
+    ? "Choose an answer on the Learn card before using the phone again."
+    : canAdvance && !isTeachingStep
+      ? "That step is complete. Press Next on the Learn card."
+      : "Read this explanation, then press Got it on the Learn card.";
 
   useEffect(() => {
     const shell = document.querySelector(".phone-shell");
@@ -251,6 +268,7 @@ export function LearnTourOverlay() {
     setLearnData({});
     setWalletOpen(false);
     setSelectedWalletCard("");
+    setBlockedMessage("");
   }, [assignedApp, learnAssignmentId]);
 
   useEffect(() => {
@@ -259,7 +277,16 @@ export function LearnTourOverlay() {
     setStepReady(Boolean(completedSteps[activeStepKey]));
     setWalletOpen(false);
     setSelectedWalletCard("");
+    setBlockedMessage("");
   }, [activeStepKey, assignedApp, learnAssignmentId]);
+
+  useEffect(() => {
+    function onBlocked(event) {
+      setBlockedMessage(event.detail?.message || "Use the Learn card before using the phone again.");
+    }
+    window.addEventListener("virtual-os-phone-action-blocked", onBlocked);
+    return () => window.removeEventListener("virtual-os-phone-action-blocked", onBlocked);
+  }, []);
 
   function markCurrentStepReady() {
     setCompletedSteps((steps) => ({ ...steps, [activeStepKey]: true }));
@@ -320,7 +347,7 @@ export function LearnTourOverlay() {
       if (!stepReady) {
         trackLearnAttempt(assignedApp, true, activeStep.advanceOn, userId);
       }
-      if (activeStep?.question) {
+      if (activeStep?.question || activeStep?.stopAfterAction) {
         markCurrentStepReady();
       } else {
         advanceAfterAction();
@@ -355,7 +382,9 @@ export function LearnTourOverlay() {
       completeModule();
       return;
     }
-    setCompletedSteps((steps) => ({ ...steps, [activeStepKey]: true }));
+    if (!isTeachingStep) {
+      setCompletedSteps((steps) => ({ ...steps, [activeStepKey]: true }));
+    }
     setStepIndex((index) => Math.min(index + 1, guide.steps.length - 1));
   }
 
@@ -437,11 +466,29 @@ export function LearnTourOverlay() {
     setCompletedGuide(null);
   }
 
+  function getNextButtonLabel() {
+    if (stepIndex >= guide.steps.length - 1) {
+      return "Finish";
+    }
+    if (isTeachingStep) {
+      return "Got it";
+    }
+    if (!canAdvance && (activeStep.advanceOn || activeStep.completeEvent)) {
+      return "Do the step";
+    }
+    return "Next";
+  }
+
   if (completedGuide) {
     const suggestedRevisits = getSuggestedLearnRevisits(learnMetrics);
     const completedAppLabel = getLearnAppLabel(completedGuide.app);
     return (
-      <aside className={`learn-success-page ${completedGuide.final ? "complete" : ""}`} data-support-ui="true">
+      <aside
+        className={`learn-success-page ${completedGuide.final ? "complete" : ""}`}
+        data-support-ui="true"
+        data-phone-interaction-gate="true"
+        data-phone-blocked-message="Learning is paused. Choose the next option on this completion card."
+      >
         <span>{completedGuide.final ? "Learn complete" : "Good job"}</span>
         <strong>{completedGuide.final ? "Well done" : `${completedGuide.title} complete`}</strong>
         <p>
@@ -491,11 +538,24 @@ export function LearnTourOverlay() {
   }
 
   return (
-    <aside className="learn-tour-card" data-support-ui="true">
-      <span>Learn</span>
+    <aside
+      className="learn-tour-card"
+      data-support-ui="true"
+      ref={cardRef}
+      data-phone-interaction-gate={phoneInteractionPaused ? "true" : undefined}
+      data-phone-blocked-message={phoneBlockedMessage}
+    >
+      <GuideCursor
+        cardRef={cardRef}
+        selectors={activeStep.selectors || []}
+        replayKey={activeStepKey}
+        targetMode={activeStep.selectors?.some((selector) => selector.includes("status-")) ? "top-right" : "center"}
+        autoPlay={!isKnowledgeStep}
+      />
+      <span>{isKnowledgeStep ? "Learn: check" : "Learn: guide"}</span>
       <strong>{guide.title}</strong>
       <div className="learn-step-meta">
-        <b>Step {stepIndex + 1} of {guide.steps.length}</b>
+        <b>{learnPartLabel}</b>
         <span>{activeStep.label}</span>
       </div>
       <p>{renderInstruction(activeStep.instruction)}</p>
@@ -525,15 +585,19 @@ export function LearnTourOverlay() {
         </div>
       ) : (
         <>
-          {activeStep.output ? <p className="learn-step-note">{renderInstruction(activeStep.output)}</p> : null}
+          {activeStep.output && isTeachingStep ? <p className="learn-step-note">{renderInstruction(activeStep.output)}</p> : null}
         </>
       )}
+      {!isTeachingStep && !activeStep.question ? (
+        <p className="learn-action-lock">{canAdvance ? "Step done." : "Follow the highlighted instruction to continue."}</p>
+      ) : null}
+      {blockedMessage ? <div className="phone-gate-reminder" role="status">{blockedMessage}</div> : null}
       <div className="learn-panel-actions">
         <button type="button" className="learn-prev-btn" disabled={stepIndex === 0} onClick={goToPreviousStep}>
           Previous step
         </button>
         <button type="button" className="learn-next-btn" disabled={!canAdvance} onClick={goToNextStep}>
-          {stepIndex >= guide.steps.length - 1 ? "Finish module" : "Next"}
+          {getNextButtonLabel()}
         </button>
       </div>
     </aside>

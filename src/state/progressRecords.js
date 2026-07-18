@@ -1,4 +1,4 @@
-import { SCENARIO_LIBRARY } from "./v2Assessment.js";
+import { SCENARIO_LIBRARY, getChecklistScoresForAccount } from "./v2Assessment.js";
 import { filterEvidenceActions, filterEvidenceEvents, summarizeInteractions } from "./sessionMetrics.js";
 import { getLearnAccountMetrics } from "./learnMetrics.js";
 
@@ -186,7 +186,7 @@ export function getParticipantScenarioRecord(state, accountId, completedAt = Dat
         ? participantInteractionMetrics.typingLatencyTotalMs / participantInteractionMetrics.typingLatencySamples
         : null,
     },
-    checklistScores: state.checklistScores,
+    checklistScores: getChecklistScoresForAccount(state, accountId),
     notes: state.adminNotes,
   };
 }
@@ -232,7 +232,7 @@ export function appendParticipantProgressRecord(state, accountId, completedAt = 
           practiceMetrics: progress.practiceMetrics,
           assessmentMetrics: progress.assessmentMetrics,
           taskEvidence: progress.taskEvidence,
-          checklistScores: state.checklistScores,
+          checklistScores: progress.checklistScores,
           notes: state.adminNotes,
         },
         ...state.session.records,

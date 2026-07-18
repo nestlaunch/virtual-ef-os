@@ -24,12 +24,26 @@ function formatLearnAppointment(appointment, timeOffset = 0, dayOffset = 0) {
 
 export const LEARN_MODULES = {
   home: {
-    title: "Home Navigation target",
+    title: "Home Navigation",
     steps: [
+      {
+        label: "How the phone is arranged",
+        selectors: [".phone-shell", '[data-learn-target="home-apps"]'],
+        teaching: true,
+        instruction: "Top: status. Middle: apps. Bottom: Back, Home, Recent.",
+        output: "Next: practise navigation.",
+      },
+      {
+        label: "Status bar",
+        selectors: ['[data-learn-target="status-battery"]', '[data-learn-target="status-signal"]'],
+        teaching: true,
+        instruction: "The status bar shows signal and battery.",
+        output: "Signal: 5G. Battery: 61%.",
+      },
       {
         label: "Check status bar",
         selectors: ['[data-learn-target="status-battery"]', '[data-learn-target="status-signal"]'],
-        instruction: "Look at the top-right status area. It shows mobile signal and battery percentage.",
+        instruction: "Now check the top-right status area.",
         question: "What battery percentage is shown?",
         answers: [
           { label: "61%", correct: true },
@@ -38,9 +52,149 @@ export const LEARN_MODULES = {
         ],
       },
       {
-        label: "Scan app icons",
+        label: "App purposes",
         selectors: ['[data-learn-target="home-apps"]', ".home-app"],
-        instruction: "Scan the app icons. Each app has a different purpose before you open it. We will practise what each app is used for.",
+        teaching: true,
+        instruction: "Messages: SMS. Calendar: appointments. WhatsApp: chats. Maps: routes. Bank: payment. Singpass: approval.",
+        output: "Next: open each app, then use Back to return.",
+      },
+      {
+        label: "Open Calendar",
+        selectors: ['[data-learn-target="home-app-calendar"]'],
+        instruction: "Tap Calendar. Calendar is for saving appointments.",
+        advanceOn: "click",
+      },
+      {
+        label: "Calendar interface",
+        selectors: [".calendar-app"],
+        teaching: true,
+        instruction: "This is Calendar. It shows dates and saved appointment entries.",
+        output: "Press Got it, then use Back to return to Home.",
+      },
+      {
+        label: "Back to Home from Calendar",
+        selectors: ['[data-learn-target="nav-back"]'],
+        instruction: "Tap Back to return to the Home screen.",
+        advanceOn: "click",
+      },
+      {
+        label: "Open Messages",
+        selectors: ['[data-learn-target="home-app-messages"]'],
+        instruction: "Tap Messages. Messages is for formal SMS.",
+        advanceOn: "click",
+      },
+      {
+        label: "Messages interface",
+        selectors: [".sms-app"],
+        teaching: true,
+        instruction: "This is Messages. It shows SMS conversations, such as clinic or appointment messages.",
+        output: "Press Got it, then use Back to return to Home.",
+      },
+      {
+        label: "Back to Home from Messages",
+        selectors: ['[data-learn-target="nav-back"]'],
+        instruction: "Tap Back to return to the Home screen.",
+        advanceOn: "click",
+      },
+      {
+        label: "Open WhatsApp",
+        selectors: ['[data-learn-target="home-app-whatsapp"]'],
+        instruction: "Tap WhatsApp. WhatsApp is for informal chats.",
+        advanceOn: "click",
+      },
+      {
+        label: "WhatsApp interface",
+        selectors: [".wa-app"],
+        teaching: true,
+        instruction: "This is WhatsApp. It shows informal chats with family, friends, or groups.",
+        output: "Press Got it, then use Back to return to Home.",
+      },
+      {
+        label: "Back to Home from WhatsApp",
+        selectors: ['[data-learn-target="nav-back"]'],
+        instruction: "Tap Back to return to the Home screen.",
+        advanceOn: "click",
+      },
+      {
+        label: "Open Maps",
+        selectors: ['[data-learn-target="home-app-maps"]'],
+        instruction: "Tap Maps. Maps is for planning routes.",
+        advanceOn: "click",
+      },
+      {
+        label: "Maps interface",
+        selectors: [".maps-app"],
+        teaching: true,
+        instruction: "This is Maps. It helps you choose a start point, destination, travel mode, and route.",
+        output: "Press Got it, then use Back to return to Home.",
+      },
+      {
+        label: "Back to Home from Maps",
+        selectors: ['[data-learn-target="nav-back"]'],
+        instruction: "Tap Back to return to the Home screen.",
+        advanceOn: "click",
+      },
+      {
+        label: "Open Bank",
+        selectors: ['[data-learn-target="home-app-bank"]'],
+        instruction: "Tap Bank. Bank is for checking balance and practising payments.",
+        advanceOn: "click",
+      },
+      {
+        label: "Bank interface",
+        selectors: [".bank-app"],
+        teaching: true,
+        instruction: "This is Bank. It is used to check balances and practise payment steps safely.",
+        output: "Press Got it, then use Back to return to Home.",
+      },
+      {
+        label: "Back to Home from Bank",
+        selectors: ['[data-learn-target="nav-back"]'],
+        instruction: "Tap Back to return to the Home screen.",
+        advanceOn: "click",
+      },
+      {
+        label: "Open Singpass",
+        selectors: ['[data-learn-target="home-app-singpass"]'],
+        instruction: "Tap Singpass. Singpass is for identity, login, and approvals.",
+        advanceOn: "click",
+      },
+      {
+        label: "Singpass interface",
+        selectors: [".singpass-app"],
+        teaching: true,
+        instruction: "This is Singpass. It is used for identity, secure login, inbox messages, and approvals.",
+        output: "Press Got it, then use Back to return to Home.",
+      },
+      {
+        label: "Back to Home from Singpass",
+        selectors: ['[data-learn-target="nav-back"]'],
+        instruction: "Tap Back to return to the Home screen.",
+        advanceOn: "click",
+      },
+      {
+        label: "Open Settings",
+        selectors: ['[data-learn-target="home-app-settings"]'],
+        instruction: "Tap Settings. Settings is for device preferences.",
+        advanceOn: "click",
+      },
+      {
+        label: "Settings interface",
+        selectors: [".settings-app"],
+        teaching: true,
+        instruction: "This is Settings. It contains device and practice preferences.",
+        output: "Press Got it, then use Back to return to Home.",
+      },
+      {
+        label: "Back to Home from Settings",
+        selectors: ['[data-learn-target="nav-back"]'],
+        instruction: "Tap Back to return to the Home screen.",
+        advanceOn: "click",
+      },
+      {
+        label: "Choose the correct app",
+        selectors: ['[data-learn-target="home-apps"]', ".home-app"],
+        instruction: "Use what you learned about each app's purpose.",
         question: "Which app is used to save appointments?",
         answers: [
           { label: "Calendar", correct: true },
@@ -49,29 +203,7 @@ export const LEARN_MODULES = {
         ],
       },
       {
-        label: "Messages app",
-        selectors: ['[data-learn-target="home-app-messages"]'],
-        instruction: "Messages is used for formal SMS information, such as clinic or appointment messages.",
-        question: "Which app would you open to read a clinic SMS?",
-        answers: [
-          { label: "Messages", correct: true },
-          { label: "Bank", correct: false },
-          { label: "WhatsApp", correct: false },
-        ],
-      },
-      {
-        label: "Calendar app",
-        selectors: ['[data-learn-target="home-app-calendar"]'],
-        instruction: "Calendar is used to save, check, edit, and remove appointments.",
-        question: "Which app would you use to record a psychiatry appointment?",
-        answers: [
-          { label: "Calendar", correct: true },
-          { label: "Maps", correct: false },
-          { label: "Singpass", correct: false },
-        ],
-      },
-      {
-        label: "WhatsApp app",
+        label: "Identify informal chat",
         selectors: ['[data-learn-target="home-app-whatsapp"]'],
         instruction: "WhatsApp is used for informal chats, such as replying to family or friends.",
         question: "Which app would you use to reply to a family dinner message?",
@@ -81,62 +213,18 @@ export const LEARN_MODULES = {
           { label: "Bank", correct: false },
         ],
       },
-      {
-        label: "Maps app",
-        selectors: ['[data-learn-target="home-app-maps"]'],
-        instruction: "Maps is used to enter a start point and destination, then check the route and travel time.",
-        question: "Which app would you use to find travel time to a clinic?",
-        answers: [
-          { label: "Maps", correct: true },
-          { label: "Calendar", correct: false },
-          { label: "Messages", correct: false },
-        ],
-      },
-      {
-        label: "Bank app",
-        selectors: ['[data-learn-target="home-app-bank"]'],
-        instruction: "Bank is used to check account balance and make a simulated payment.",
-        question: "Which app would you use to check your account balance?",
-        answers: [
-          { label: "Bank", correct: true },
-          { label: "Singpass", correct: false },
-          { label: "Calendar", correct: false },
-        ],
-      },
-      {
-        label: "Singpass app",
-        selectors: ['[data-learn-target="home-app-singpass"]'],
-        instruction: "Singpass is used for identity, secure login, and approving expected secure requests.",
-        question: "Which app would you use to approve an expected secure request?",
-        answers: [
-          { label: "Singpass", correct: true },
-          { label: "WhatsApp", correct: false },
-          { label: "Maps", correct: false },
-        ],
-      },
-      {
-        label: "Back button",
-        selectors: ['[data-learn-target="nav-back"]'],
-        instruction: "Tap the Back button. It is used to return to the previous screen.",
-        advanceOn: "click",
-      },
-      {
-        label: "Home button",
-        selectors: ['[data-learn-target="nav-home"]'],
-        instruction: "Tap the Home button. It brings you back to the app grid.",
-        advanceOn: "click",
-      },
-      {
-        label: "Recent apps",
-        selectors: ['[data-learn-target="nav-tabs"]'],
-        instruction: "Tap the Recent apps button to see open apps, then tap it again if you need to close the switcher.",
-        advanceOn: "click",
-      },
     ],
   },
   sms: {
     title: "Messages target",
     steps: [
+      {
+        label: "About Messages",
+        selectors: ['[data-learn-target="sms-doctor-row"]'],
+        teaching: true,
+        instruction: "Messages is for formal SMS. Look for sender, date, time, and place.",
+        output: "Next: open the SMS.",
+      },
       {
         label: "Find sender",
         selectors: ['[data-learn-target="sms-doctor-row"]'],
@@ -146,7 +234,7 @@ export const LEARN_MODULES = {
       {
         label: "Extract date and time",
         selectors: ['[data-learn-target="sms-doctor-message"]'],
-        instruction: "Read the highlighted message. Look for the words after 'on' and the time after the date.",
+        instruction: "Read the highlighted SMS. Find date and time.",
         question: "What is the date and time for the appointment?",
         answers: [
           {
@@ -168,15 +256,22 @@ export const LEARN_MODULES = {
     title: "Calendar target",
     steps: [
       {
+        label: "About Calendar",
+        selectors: ['[data-learn-target="calendar-single-date"]'],
+        teaching: true,
+        instruction: "Calendar saves appointments. Check title, date, start, and end.",
+        output: "Next: create and edit one entry.",
+      },
+      {
         label: "Choose date",
         selectors: ['[data-learn-target="calendar-single-date"]'],
-        instruction: `Tap the highlighted date box for ${getDoctorAppointmentDateLabel()} to open the event editor.`,
+        instruction: `Tap ${getDoctorAppointmentDateLabel()}.`,
         advanceOn: "click",
       },
       {
         label: "Add title",
         selectors: [".title-input"],
-        instruction: "Type exactly: **Psychiatry appointment**. Date and time unlock after the title is filled.",
+        instruction: "Type: **Psychiatry appointment**.",
         advanceOn: "change",
         validate: (event) => event.target?.value.trim().toLowerCase() === "psychiatry appointment",
       },
@@ -233,6 +328,13 @@ export const LEARN_MODULES = {
     title: "WhatsApp target",
     steps: [
       {
+        label: "About WhatsApp",
+        selectors: ['[data-learn-target="wa-dinner-row"]'],
+        teaching: true,
+        instruction: "WhatsApp is for informal chats. Read, decide, reply clearly.",
+        output: "Next: open the dinner chat.",
+      },
+      {
         label: "Open dinner chat",
         selectors: ['[data-learn-target="wa-dinner-row"]'],
         instruction: "Tap the highlighted dinner chat.",
@@ -251,6 +353,13 @@ export const LEARN_MODULES = {
     title: "Maps target",
     steps: [
       {
+        label: "About Maps",
+        selectors: [".maps-field:first-of-type select", ".maps-field:nth-of-type(2) select"],
+        teaching: true,
+        instruction: "Maps plans routes. Choose start, destination, and travel mode.",
+        output: "Next: plan Home to Clinic B.",
+      },
+      {
         label: "Current location",
         selectors: [".maps-field:first-of-type select"],
         instruction: "Open Current location and choose Home.",
@@ -260,7 +369,7 @@ export const LEARN_MODULES = {
       {
         label: "Destination",
         selectors: [".maps-field:nth-of-type(2) select"],
-        instruction: "Open Destination and choose Clinic B. Home and Clinic B must be different.",
+        instruction: "Choose Clinic B.",
         advanceOn: "change",
         validate: (event) => {
           const destination = event.target?.value;
@@ -271,7 +380,7 @@ export const LEARN_MODULES = {
       {
         label: "Travel mode",
         selectors: [".maps-route-options button", ".maps-time-field input"],
-        instruction: "Choose Public transport, then check that the Leave at time field is visible.",
+        instruction: "Choose Public transport.",
         advanceOn: "click",
         validate: (event) => Boolean(event.target?.closest?.(".maps-route-options button")),
       },
@@ -302,6 +411,13 @@ export const LEARN_MODULES = {
   bank: {
     title: "Bank target",
     steps: [
+      {
+        label: "About Bank",
+        selectors: [".bank-login-card", ".bank-primary-btn"],
+        teaching: true,
+        instruction: "Bank is for balance and payment practice. Match recipient, amount, purpose.",
+        output: "No real money is moved.",
+      },
       {
         label: "Log in",
         selectors: [".bank-primary-btn"],
@@ -347,7 +463,7 @@ export const LEARN_MODULES = {
       {
         label: "Review payment",
         selectors: [".bank-review", ".bank-primary-btn"],
-        instruction: "Review the payee and amount. Tap **Confirm** only when the recipient is **Hougang Polyclinic** and the amount is **25.00**.",
+        instruction: "Confirm only if payee is **Hougang Polyclinic** and amount is **25.00**.",
         output: "The next screen will ask you to approve the same payment in Singpass.",
         completeEvent: "virtual-os-learn-bank-confirmed",
       },
@@ -375,9 +491,16 @@ export const LEARN_MODULES = {
     title: "Singpass target",
     steps: [
       {
+        label: "About Singpass",
+        selectors: ['[data-learn-target="singpass-dashboard"]'],
+        teaching: true,
+        instruction: "Singpass is for identity, login, inbox, and approvals.",
+        output: "Approve only when details match.",
+      },
+      {
         label: "Find dashboard",
         selectors: ['[data-learn-target="singpass-dashboard"]'],
-        instruction: "Look at the Singpass dashboard. It is used for identity, messages, and approvals.",
+        instruction: "Look at the Singpass dashboard.",
         question: "What should Singpass be used for in this practice?",
         answers: [
           { label: "Approving expected secure requests", correct: true },
@@ -431,7 +554,7 @@ export const LEARN_MODULES = {
       {
         label: "Open Inbox",
         selectors: ['[data-learn-target="singpass-inbox-tile"]', ".singpass-message-row"],
-        instruction: "Open Inbox to view agency messages. Check sender and purpose before acting.",
+        instruction: "Open Inbox. Check sender and purpose.",
         advanceOn: "click",
       },
     ],

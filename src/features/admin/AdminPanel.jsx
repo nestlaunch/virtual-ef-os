@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { formatParticipantOption, getParticipantCode } from "../../state/participantIdentity";
 import { getCurrentAssignment } from "../../state/sessionLifecycle";
-import { APP_CATALOG, CHECKLIST_ITEMS, LEARN_APP_CATALOG, SCORE_LABELS, SCENARIO_LIBRARY, SESSION_MODES, formatAlias } from "../../state/v2Assessment";
+import { APP_CATALOG, CHECKLIST_ITEMS, LEARN_APP_CATALOG, SCORE_LABELS, SCENARIO_LIBRARY, SESSION_MODES, formatAlias, getChecklistScoresForAccount } from "../../state/v2Assessment";
 import { formalThreads, weeklyRules, whatsappThreads } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { PRACTICE_GUIDES, PRACTICE_PAGE_OVERRIDES } from "../practice/practiceGuides";
@@ -56,6 +57,22 @@ function formatDate(value) {
 
 function formatScore(score) {
   return score === null || score === undefined ? "Not scored" : `${score} - ${SCORE_LABELS[score]}`;
+}
+
+function getSessionAccounts(state) {
+  const accountsById = new Map((state.session.userAccounts || []).map((account) => [account.id, account]));
+  (state.session.participants || []).forEach((participant) => {
+    if (!participant?.accountId || accountsById.has(participant.accountId)) {
+      return;
+    }
+    accountsById.set(participant.accountId, {
+      id: participant.accountId,
+      alias: participant.alias || participant.label || `Device ${accountsById.size + 1}`,
+      pin: "",
+      fromLiveParticipant: true,
+    });
+  });
+  return [...accountsById.values()];
 }
 
 function formatClockTime(minutes) {
@@ -295,6 +312,7 @@ function describeLogEntry(entry) {
     open_app: `Opened ${entry.app}`,
     go_home: "Pressed Home",
     go_back: `Pressed Back to ${entry.to}`,
+    toggle_tabs: "Opened Recent apps",
     add_event: "Added Calendar event",
     update_event: "Updated Calendar event",
     wa_reply: `Replied in WhatsApp: ${whatsappThreads.find((thread) => thread.id === entry.threadId)?.sender || entry.threadId}`,
@@ -304,6 +322,17 @@ function describeLogEntry(entry) {
     input_focus: `Focused ${entry.target || "input"}`,
     typing_latency: `Started typing after ${formatDuration(entry.valueMs)}`,
     admin_cue: `Cue given: ${entry.text}`,
+    orientation_control: `Tried phone control: ${entry.target}`,
+    practice_step: `Completed task step: ${entry.stepId}`,
+    practice_prompt: `Used help level ${entry.level}${entry.text ? `: ${entry.text}` : ""}`,
+    practice_wrong_step: "Made a non-matching task action and continued",
+    practice_answer: `Checked task information${entry.correct ? " correctly" : " and reviewed it again"}`,
+    assessment_started_by_user: "Started independent assessment",
+    assessment_step: `Completed observed assessment step: ${entry.stepId}`,
+    assessment_prompt: `Clinician prompt level ${entry.level}: ${entry.text}`,
+    assessment_complete: "Submitted assessment",
+    start_local_mode: "Started local practice session",
+    return_to_main_page: "Returned to the main page",
   };
   return labels[entry.kind] || entry.kind || "Activity";
 }
@@ -371,6 +400,7 @@ export function AdminPanel() {
   } = useVirtualOS();
 
   const [activeTab, setActiveTab] = useState("current");
+  const [sessionView, setSessionView] = useState("run");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [pendingMode, setPendingMode] = useState("learn");
@@ -387,17 +417,22 @@ export function AdminPanel() {
   const [modeConfirmText, setModeConfirmText] = useState("");
 
   const joinedPatients = state.session.participants.filter((p) => p.role === "patient");
-  const selectedAccount = state.session.userAccounts.find((account) => account.id === selectedAccountId);
+  const sessionAccounts = getSessionAccounts(state);
+  const selectedAccount = sessionAccounts.find((account) => account.id === selectedAccountId);
   const selectedParticipant = state.session.participants.find((participant) => participant.accountId === selectedAccountId);
   const fallbackParticipant = joinedPatients.length === 1 ? joinedPatients[0] : null;
   const fallbackAccount = fallbackParticipant
-    ? state.session.userAccounts.find((account) => account.id === fallbackParticipant.accountId)
+    ? sessionAccounts.find((account) => account.id === fallbackParticipant.accountId)
     : null;
   const modeTargetAccount = selectedAccount || fallbackAccount;
   const modeTargetParticipant = selectedParticipant || fallbackParticipant;
+  const currentMode = modeTargetAccount
+    ? modeTargetParticipant?.mode || state.session.userModes[modeTargetAccount.id] || state.session.mode
+    : state.session.mode;
   const settingsMode = pendingMode;
   const metrics = state.interactionMetrics;
-  const scoredItems = Object.values(state.checklistScores).filter((score) => score !== null).length;
+  const selectedChecklistScores = getChecklistScoresForAccount(state, selectedAccount?.id || fallbackAccount?.id);
+  const scoredItems = Object.values(selectedChecklistScores).filter((score) => score !== null).length;
   const averageTypingLatency = metrics.typingLatencySamples > 0 ? metrics.typingLatencyTotalMs / metrics.typingLatencySamples : null;
   const assessmentAccount = selectedAccount || fallbackAccount;
   const assessmentAccountId = assessmentAccount?.id;
@@ -484,8 +519,15 @@ export function AdminPanel() {
     if (!modeTargetAccount) {
       return;
     }
+    if (
+      pendingMode === "assessment"
+      && currentMode !== "assessment"
+      && !window.confirm(`Begin independent Assessment for ${formatAlias(modeTargetAccount.alias)}? Step-by-step guidance will be hidden.`)
+    ) {
+      return;
+    }
     setUserMode(modeTargetAccount.id, pendingMode);
-    setModeConfirmText(`${SESSION_MODES.find((mode) => mode.id === pendingMode)?.label || pendingMode} mode sent to ${formatAlias(modeTargetAccount.alias)}.`);
+    setModeConfirmText(`Sent. ${formatAlias(modeTargetAccount.alias)}'s screen will now change to ${SESSION_MODES.find((mode) => mode.id === pendingMode)?.label || pendingMode}.`);
   }
 
   return (
@@ -514,7 +556,7 @@ export function AdminPanel() {
           <div className="device-grid live-grid">
             {Array.from({ length: state.session.participantLimit }).map((_, index) => {
               const device = joinedPatients[index];
-              const account = device ? state.session.userAccounts.find((item) => item.id === device.accountId) : null;
+              const account = device ? sessionAccounts.find((item) => item.id === device.accountId) : null;
               const isSelected = Boolean(account && account.id === selectedAccountId);
               return (
                 <button
@@ -527,6 +569,7 @@ export function AdminPanel() {
                   <div className="device-card-head">
                     <span className="device-slot">Device {index + 1}</span>
                     <strong>{account ? formatAlias(account.alias) : "Waiting"}</strong>
+                    {account ? <em className="device-participant-code">{getParticipantCode(account)}</em> : null}
                   </div>
                   <MiniInterfacePreview app={device?.currentApp} mode={device?.mode} selected={isSelected} />
                   <LiveDeviceEvidence state={state} accountId={account?.id} />
@@ -544,6 +587,7 @@ export function AdminPanel() {
         {settingsOpen ? (
           <AccountSettings
             state={state}
+            sessionAccounts={sessionAccounts}
             newAlias={newAlias}
             newPin={newPin}
             setNewAlias={setNewAlias}
@@ -555,83 +599,129 @@ export function AdminPanel() {
           <PastRecords records={state.session.records} />
         ) : (
           <>
-            <section className="admin-section session-actions-panel">
-              <h3>Session Controls</h3>
-              <button type="button" className="admin-danger" onClick={confirmEndSession} disabled={Boolean(state.session.completedAt)}>
-                {state.session.completedAt ? "Session Ended" : "End Session"}
-              </button>
+            <section className="selected-user-sticky" aria-live="polite">
+              {modeTargetAccount ? (
+                <>
+                  <div>
+                    <span>Selected user</span>
+                    <strong>{formatAlias(modeTargetAccount.alias)}</strong>
+                    <em>{getParticipantCode(modeTargetAccount)}</em>
+                  </div>
+                  <div>
+                    <span>Current mode</span>
+                    <strong>{modeTargetParticipant?.mode || state.session.userModes[modeTargetAccount.id] || state.session.mode}</strong>
+                    <em>{modeTargetParticipant?.currentApp ? `In ${modeTargetParticipant.currentApp}` : "Waiting for activity"}</em>
+                  </div>
+                </>
+              ) : (
+                <p>Select a joined user to configure, run, or observe a session.</p>
+              )}
             </section>
 
-            <section className="admin-section selected-user-control">
-              <h3>Mode</h3>
-              <p className="admin-muted">
-                {selectedAccount
-                  ? `Selected: ${formatAlias(selectedAccount.alias)} | Current: ${selectedParticipant?.mode || state.session.userModes[selectedAccount.id] || state.session.mode}`
-                  : fallbackAccount
-                    ? `Selected: ${formatAlias(fallbackAccount.alias)} | Current: ${modeTargetParticipant?.mode || state.session.userModes[fallbackAccount.id] || state.session.mode}`
-                    : "Tap a joined user on the live panel, then press ENTER to confirm the selected mode."}
-              </p>
-              <div className="mode-control large">
-                {SESSION_MODES.map((mode) => (
-                  <button key={mode.id} type="button" className={pendingMode === mode.id ? "active" : ""} onClick={() => setPendingMode(mode.id)}>
-                    {mode.label}
+            <nav className="session-workflow-tabs" aria-label="Current session workflow">
+              <button type="button" className={sessionView === "run" ? "active" : ""} onClick={() => setSessionView("run")}>Run session</button>
+              <button type="button" className={sessionView === "configure" ? "active" : ""} onClick={() => setSessionView("configure")}>Configure</button>
+              <button type="button" className={sessionView === "observe" ? "active" : ""} onClick={() => setSessionView("observe")}>Observe</button>
+            </nav>
+
+            {sessionView === "configure" ? (
+              <>
+                <section className="admin-section selected-user-control">
+                  <h3>Choose mode</h3>
+                  <p className="admin-muted">
+                    Currently on <strong>{SESSION_MODES.find((mode) => mode.id === currentMode)?.label || currentMode}</strong>. Choose a new mode, then press the send button below.
+                  </p>
+                  <div className="mode-control large">
+                    {SESSION_MODES.map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        className={pendingMode === mode.id ? "active" : ""}
+                        onClick={() => {
+                          setPendingMode(mode.id);
+                          setModeConfirmText("");
+                        }}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                  <ModeInterface mode={pendingMode} />
+                  <button
+                    type="button"
+                    className="admin-primary enter-mode-btn"
+                    disabled={!modeTargetAccount}
+                    onClick={confirmModeForSelectedUser}
+                  >
+                    {modeTargetAccount
+                      ? `Send ${SESSION_MODES.find((mode) => mode.id === pendingMode)?.label || pendingMode} to ${formatAlias(modeTargetAccount.alias)}`
+                      : "Select a user first"}
                   </button>
-                ))}
-              </div>
-              <ModeInterface mode={pendingMode} />
-              <button
-                type="button"
-                className="admin-primary enter-mode-btn"
-                disabled={!modeTargetAccount}
-                onClick={confirmModeForSelectedUser}
-              >
-                ENTER
-              </button>
-              {modeConfirmText ? <p className="mode-confirm-text">{modeConfirmText}</p> : null}
-            </section>
+                  {modeConfirmText ? <p className="mode-confirm-text">{modeConfirmText}</p> : null}
+                </section>
 
-            <ModeAwareSettingsPanel
-              mode={settingsMode}
-              learnAppId={learnAppId}
-              setLearnAppId={setLearnAppId}
-              scenarioId={scenarioId}
-              setScenarioId={setScenarioId}
-              targetUserId={targetUserId}
-              setTargetUserId={setTargetUserId}
-              userAccounts={state.session.userAccounts}
-              startLearnModule={startLearnModule}
-              pushPracticeScenario={pushPracticeScenario}
-              assessmentScenarioId={assessmentScenarioId}
-              setAssessmentScenarioId={setAssessmentScenarioId}
-              pushAssessmentScenario={pushAssessmentScenario}
-              freeStimulusApp={freeStimulusApp}
-              setFreeStimulusApp={setFreeStimulusApp}
-              freeStimulusTitle={freeStimulusTitle}
-              setFreeStimulusTitle={setFreeStimulusTitle}
-              freeStimulusMessage={freeStimulusMessage}
-              setFreeStimulusMessage={setFreeStimulusMessage}
-              freeStimulusEncouragement={freeStimulusEncouragement}
-              setFreeStimulusEncouragement={setFreeStimulusEncouragement}
-              pushFreeStimulus={pushFreeStimulus}
-              state={state}
-              removeCustomStimulus={removeCustomStimulus}
-            />
+                <ModeAwareSettingsPanel
+                  mode={settingsMode}
+                  learnAppId={learnAppId}
+                  setLearnAppId={setLearnAppId}
+                  scenarioId={scenarioId}
+                  setScenarioId={setScenarioId}
+                  targetUserId={targetUserId}
+                  setTargetUserId={setTargetUserId}
+                  userAccounts={sessionAccounts}
+                  startLearnModule={startLearnModule}
+                  pushPracticeScenario={pushPracticeScenario}
+                  assessmentScenarioId={assessmentScenarioId}
+                  setAssessmentScenarioId={setAssessmentScenarioId}
+                  pushAssessmentScenario={pushAssessmentScenario}
+                  freeStimulusApp={freeStimulusApp}
+                  setFreeStimulusApp={setFreeStimulusApp}
+                  freeStimulusTitle={freeStimulusTitle}
+                  setFreeStimulusTitle={setFreeStimulusTitle}
+                  freeStimulusMessage={freeStimulusMessage}
+                  setFreeStimulusMessage={setFreeStimulusMessage}
+                  freeStimulusEncouragement={freeStimulusEncouragement}
+                  setFreeStimulusEncouragement={setFreeStimulusEncouragement}
+                  pushFreeStimulus={pushFreeStimulus}
+                  state={state}
+                  removeCustomStimulus={removeCustomStimulus}
+                />
+              </>
+            ) : null}
 
-            <EvaluationPanel
-              metrics={metrics}
-              helpers={helpers}
-              averageTypingLatency={averageTypingLatency}
-              state={state}
-              selectedAccount={selectedAccount}
-              scoredItems={scoredItems}
-              scoreChecklistItem={scoreChecklistItem}
-              updateAdminNotes={updateAdminNotes}
-              logCue={logCue}
-              openApp={openApp}
-              setPracticeSupport={setPracticeSupport}
-              pushAssessmentPrompt={pushAssessmentPrompt}
-              removeCustomStimulus={removeCustomStimulus}
-            />
+            {sessionView === "run" ? (
+              <>
+                <section className="admin-section session-actions-panel">
+                  <h3>Run session</h3>
+                  <p className="admin-muted">Monitor the current task and use the least assistance required.</p>
+                  <button type="button" className="admin-danger" onClick={confirmEndSession} disabled={Boolean(state.session.completedAt)}>
+                    {state.session.completedAt ? "Session Ended" : "End Session"}
+                  </button>
+                </section>
+                <EvaluationPanel
+                  metrics={metrics}
+                  helpers={helpers}
+                  averageTypingLatency={averageTypingLatency}
+                  state={state}
+                  selectedAccount={selectedAccount}
+                  scoredItems={scoredItems}
+                  scoreChecklistItem={scoreChecklistItem}
+                  updateAdminNotes={updateAdminNotes}
+                  logCue={logCue}
+                  openApp={openApp}
+                  setPracticeSupport={setPracticeSupport}
+                  pushAssessmentPrompt={pushAssessmentPrompt}
+                  removeCustomStimulus={removeCustomStimulus}
+                />
+              </>
+            ) : null}
+
+            {sessionView === "observe" ? (
+              <>
+                <SessionTimeline state={state} selectedAccount={selectedAccount || fallbackAccount} />
+                <LiveActivityEvidence state={state} averageTypingLatency={averageTypingLatency} selectedAccount={selectedAccount || fallbackAccount} />
+              </>
+            ) : null}
           </>
         )}
       </aside>
@@ -642,7 +732,7 @@ export function AdminPanel() {
 function ModeInterface({ mode }) {
   const content = {
     learn: ["Guided interface", "Highlights or cues should point the user to the safest correct option."],
-    practice: ["Scenario practice", "Choose and push a Practice scenario below to start checklist and prompt support."],
+    practice: ["Scenario practice", "Choose and push a Practice scenario below to start one-step guidance with graded assistance."],
     assessment: ["Independent assessment", "No blocking prompts. Observe natural performance and errors against the assigned task."],
     free: ["Unrestricted interface", "The user can press whatever they want without task prompts, gating, or Learn guidance."],
   }[mode] || ["Mode", "Select a mode."];
@@ -654,7 +744,7 @@ function ModeInterface({ mode }) {
   );
 }
 
-function AccountSettings({ state, newAlias, newPin, setNewAlias, setNewPin, submitAccount, removeUserAccount }) {
+function AccountSettings({ state, sessionAccounts, newAlias, newPin, setNewAlias, setNewPin, submitAccount, removeUserAccount }) {
   function confirmRemoveAccount(account) {
     const label = formatAlias(account.alias);
     if (window.confirm(`Delete ${label} and all saved progress records for this profile? This cannot be undone.`)) {
@@ -666,9 +756,9 @@ function AccountSettings({ state, newAlias, newPin, setNewAlias, setNewPin, subm
     <section className="admin-section">
       <h3>De-identified User Accounts</h3>
       <div className="account-grid">
-        {state.session.userAccounts.map((account) => (
+        {sessionAccounts.map((account) => (
           <div key={account.id}>
-            <span><strong>{formatAlias(account.alias)}</strong><em>PIN {account.pin}</em></span>
+            <span><strong>{formatAlias(account.alias)}</strong><em>{getParticipantCode(account)} · {account.pin ? `PIN ${account.pin}` : account.fromLiveParticipant ? "Joined from another device" : "PIN stored in backend"}</em></span>
             <button type="button" className="account-delete-btn" aria-label={`Delete ${formatAlias(account.alias)} data`} onClick={() => confirmRemoveAccount(account)}>
               <span aria-hidden="true">🗑</span>
             </button>
@@ -799,7 +889,7 @@ function FreeModeControls({
           <span>Target</span>
           <select value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}>
             <option value="all">All users</option>
-            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatAlias(account.alias)}</option>)}
+            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatParticipantOption(account)}</option>)}
           </select>
         </label>
         <label>
@@ -853,6 +943,7 @@ function LearnModuleControls({ learnAppId, setLearnAppId, targetUserId, setTarge
   return (
     <section className="admin-section learn-module-panel">
       <h3>Learn Mode Settings</h3>
+      <p className="admin-muted">Choose an app, then press the send button. Changing the dropdown alone will not change the patient's screen.</p>
       <div className="push-grid">
         <label>
           <span>App</span>
@@ -864,10 +955,10 @@ function LearnModuleControls({ learnAppId, setLearnAppId, targetUserId, setTarge
           <span>Target</span>
           <select value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}>
             <option value="all">All users</option>
-            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatAlias(account.alias)}</option>)}
+            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatParticipantOption(account)}</option>)}
           </select>
         </label>
-        <button type="button" className="admin-primary" onClick={startLearnModule}>Start Learn Module</button>
+        <button type="button" className="admin-primary" onClick={startLearnModule}>Send {selectedApp.label} Learn Module</button>
       </div>
       <div className="learn-guide-card">
         <strong>{selectedApp.label} Learn Module</strong>
@@ -889,6 +980,7 @@ function PracticeScenarioControls({ scenarioId, setScenarioId, targetUserId, set
   return (
     <section className="admin-section learn-module-panel">
       <h3>Practice Scenario Push</h3>
+      <p className="admin-muted">Choose a task, then press the send button to change the patient's task card.</p>
       <div className="push-grid">
         <label>
           <span>Scenario</span>
@@ -904,10 +996,10 @@ function PracticeScenarioControls({ scenarioId, setScenarioId, targetUserId, set
           <span>Target</span>
           <select value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}>
             <option value="all">All users</option>
-            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatAlias(account.alias)}</option>)}
+            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatParticipantOption(account)}</option>)}
           </select>
         </label>
-        <button type="button" className="admin-primary" onClick={pushPracticeScenario}>Push Practice Scenario</button>
+        <button type="button" className="admin-primary" onClick={pushPracticeScenario}>Send Practice Task</button>
       </div>
       <div className="learn-guide-card">
         <strong>{selectedScenario.title}</strong>
@@ -929,7 +1021,7 @@ function AssessmentScenarioControls({ scenarioId, setScenarioId, targetUserId, s
   return (
     <section className="admin-section learn-module-panel assessment-settings-panel">
       <h3>Assessment Settings</h3>
-      <p className="admin-muted">Independent-first task. No Learn module and no Practice checklist are shown.</p>
+      <p className="admin-muted">Choose a task, then press the send button. No Learn module or Practice checklist will be shown.</p>
       <div className="push-grid">
         <label>
           <span>Scenario</span>
@@ -945,10 +1037,10 @@ function AssessmentScenarioControls({ scenarioId, setScenarioId, targetUserId, s
           <span>Target</span>
           <select value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}>
             <option value="all">All users</option>
-            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatAlias(account.alias)}</option>)}
+            {userAccounts.map((account) => <option key={account.id} value={account.id}>{formatParticipantOption(account)}</option>)}
           </select>
         </label>
-        <button type="button" className="admin-primary" onClick={pushAssessmentScenario}>Push Assessment</button>
+        <button type="button" className="admin-primary" onClick={pushAssessmentScenario}>Send Assessment Task</button>
       </div>
       <div className="learn-guide-card">
         <strong>{selectedScenario.title}</strong>
@@ -1001,18 +1093,19 @@ function getScenarioGuideSteps(scenario) {
 
 function targetAccountsForStimulus(state, stimulus) {
   if (!stimulus) return [];
+  const sessionAccounts = getSessionAccounts(state);
   if (!stimulus.targetId || stimulus.targetId === "all") {
     const joinedIds = new Set(state.session.participants.filter((participant) => participant.role === "patient").map((participant) => participant.accountId));
-    return state.session.userAccounts.filter((account) => joinedIds.has(account.id));
+    return sessionAccounts.filter((account) => joinedIds.has(account.id));
   }
-  return state.session.userAccounts.filter((account) => account.id === stimulus.targetId);
+  return sessionAccounts.filter((account) => account.id === stimulus.targetId);
 }
 
 function targetLabelForStimulus(state, stimulus) {
   if (!stimulus?.targetId || stimulus.targetId === "all") {
     return "All joined users";
   }
-  const account = state.session.userAccounts.find((item) => item.id === stimulus.targetId);
+  const account = getSessionAccounts(state).find((item) => item.id === stimulus.targetId);
   return account ? formatAlias(account.alias) : "Removed user";
 }
 
@@ -1160,7 +1253,7 @@ function PracticeControlPanel({ state, selectedAccount, setPracticeSupport }) {
   const checklist = buildAssessmentChecklist(state, activeScenario, accountId);
   const completedChecklist = checklist.filter((item) => item.done).length;
   const latestPrompt = getLatestPromptText(metrics);
-  const supportLabel = metrics.supportMode === "checklist" ? "Checklist visible" : "Checklist hidden / prompts";
+  const supportLabel = metrics.supportMode === "checklist" ? "One-step guidance" : "Independent attempt with graded help";
   const status = !activeScenario ? "No scenario pushed" : metrics.completedAt ? "Completed" : completedSteps.length > 0 ? "In progress" : "Not started";
 
   function setSupport(supportMode, options = {}) {
@@ -1200,7 +1293,7 @@ function PracticeControlPanel({ state, selectedAccount, setPracticeSupport }) {
       </div>
 
       <div className="practice-admin-block">
-        <h4>Live Checklist Capture</h4>
+        <h4>Live Step Capture</h4>
         {guideSteps.length === 0 ? (
           <p className="admin-muted">Push a Practice scenario to see live task-step detection.</p>
         ) : (
@@ -1237,19 +1330,19 @@ function PracticeControlPanel({ state, selectedAccount, setPracticeSupport }) {
       </div>
 
       <div className="practice-admin-block">
-        <h4>Checklist Support Controls</h4>
+        <h4>Guidance Controls</h4>
         <div className="practice-admin-actions">
-          <button type="button" onClick={() => setSupport("checklist")} disabled={!accountId || !activeScenario}>Show checklist</button>
-          <button type="button" onClick={() => setSupport("prompt")} disabled={!accountId || !activeScenario}>Hide checklist</button>
-          <button type="button" onClick={() => setSupport("checklist", { newAttempt: true, resetSteps: true })} disabled={!accountId || !activeScenario}>Restart with checklist</button>
-          <button type="button" onClick={() => setSupport("prompt", { newAttempt: true, resetSteps: true })} disabled={!accountId || !activeScenario}>Restart without checklist</button>
+          <button type="button" onClick={() => setSupport("checklist")} disabled={!accountId || !activeScenario}>Show one-step guidance</button>
+          <button type="button" onClick={() => setSupport("prompt")} disabled={!accountId || !activeScenario}>Use independent view</button>
+          <button type="button" onClick={() => setSupport("checklist", { newAttempt: true, resetSteps: true })} disabled={!accountId || !activeScenario}>Restart with guidance</button>
+          <button type="button" onClick={() => setSupport("prompt", { newAttempt: true, resetSteps: true })} disabled={!accountId || !activeScenario}>Restart independently</button>
         </div>
       </div>
 
       <div className="practice-admin-block">
         <h4>Carryover Markers</h4>
-        <p>Completed with checklist: <strong>{metrics.checklistCompleted ? "Yes" : "No"}</strong></p>
-        <p>Completed without checklist: <strong>{metrics.hiddenCompleted ? "Yes" : "No"}</strong></p>
+        <p>Completed with step guidance: <strong>{metrics.checklistCompleted ? "Yes" : "No"}</strong></p>
+        <p>Completed independently: <strong>{metrics.hiddenCompleted ? "Yes" : "No"}</strong></p>
       </div>
     </section>
   );
@@ -1710,6 +1803,65 @@ function CapturedEvaluationInfo({ state, helpers }) {
         <p>Context switches: {state.metrics.contextSwitches}</p>
         <p>WhatsApp replies tracked: {whatsAppReplies}</p>
       </div>
+    </section>
+  );
+}
+
+function SessionTimeline({ state, selectedAccount }) {
+  const accountId = selectedAccount?.id || null;
+  const timelineKinds = new Set([
+    "open_app", "go_home", "go_back", "toggle_tabs", "add_event", "update_event",
+    "wa_reply", "wa_confirm", "wa_friend_confirm", "admin_cue", "orientation_control",
+    "practice_step", "practice_prompt", "practice_wrong_step", "practice_answer",
+    "assessment_started_by_user", "assessment_step", "assessment_prompt", "assessment_complete",
+    "start_local_mode", "return_to_main_page",
+  ]);
+  const scopedEntries = state.hiddenLog
+    .filter((entry) => (!accountId || entry.accountId === accountId) && timelineKinds.has(entry.kind));
+  const deduplicated = scopedEntries.filter((entry, index) => {
+    const previous = scopedEntries[index - 1];
+    if (!previous) return true;
+    const sameSignature = ["kind", "target", "stepId", "level", "app", "text"]
+      .every((key) => (previous[key] || "") === (entry[key] || ""));
+    const previousAt = previous.eventWallMs || previous.at || 0;
+    const entryAt = entry.eventWallMs || entry.at || 0;
+    return !sameSignature || Math.abs(entryAt - previousAt) > 1500;
+  });
+  const timeline = deduplicated
+    .slice(-20)
+    .reverse();
+
+  return (
+    <section className="admin-section session-timeline-panel">
+      <div className="timeline-heading">
+        <div>
+          <h3>Session timeline</h3>
+          <p className="admin-muted">
+            {selectedAccount ? `${formatAlias(selectedAccount.alias)} · ${getParticipantCode(selectedAccount)}` : "Select a user to filter the timeline."}
+          </p>
+        </div>
+        <span className="stored-indicator">Stored in session record</span>
+      </div>
+      {timeline.length === 0 ? (
+        <p className="admin-muted">Tracked actions will appear here in time order.</p>
+      ) : (
+        <ol className="session-timeline-list">
+          {timeline.map((entry, index) => {
+            const elapsed = entry.eventWallMs && state.session.startedAt
+              ? Math.max(0, entry.eventWallMs - state.session.startedAt)
+              : null;
+            return (
+              <li key={`${entry.eventWallMs || entry.at || index}-${entry.kind}-${index}`}>
+                <time>{elapsed === null ? entry.simClock || "-" : formatDuration(elapsed)}</time>
+                <div>
+                  <strong>{describeLogEntry(entry)}</strong>
+                  <span>{entry.app ? `App: ${entry.app}` : entry.mode ? `Mode: ${entry.mode}` : "Session activity"}</span>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </section>
   );
 }

@@ -1,36 +1,113 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ALIAS_POOL, formatAlias } from "../../state/v2Assessment";
 import { useVirtualOS } from "../../state/VirtualOSContext";
+import { createCloudAccount, listCloudAccounts, loginCloudAccount } from "../../state/cloudSync";
 
 export function JoinSession() {
   const { state, joinSession, setPendingUserIdentity, addUserAccount } = useVirtualOS();
-  const [step, setStep] = useState(state.session.pendingAlias && state.session.pendingUserPin ? 2 : 1);
+  const [step, setStep] = useState(1);
   const [accountMode, setAccountMode] = useState("login");
-  const [alias, setAlias] = useState(state.session.pendingAlias || state.session.userAccounts[0]?.alias || "");
+  const [alias, setAlias] = useState("");
   const [pin, setPin] = useState("");
-  const [userPin, setUserPin] = useState(state.session.pendingUserPin || "");
+  const [userPin, setUserPin] = useState("");
   const [identityError, setIdentityError] = useState("");
+  const [cloudAccounts, setCloudAccounts] = useState([]);
+  const [authenticatedAccount, setAuthenticatedAccount] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleIdentitySubmit(event) {
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshAccounts() {
+      const accounts = await listCloudAccounts();
+      if (!cancelled) {
+        setCloudAccounts(accounts);
+      }
+    }
+    refreshAccounts();
+    window.addEventListener("focus", refreshAccounts);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshAccounts);
+    };
+  }, []);
+
+  const loginAccounts = useMemo(() => {
+    return [...cloudAccounts].sort((a, b) => a.alias.localeCompare(b.alias));
+  }, [cloudAccounts]);
+
+  const availableAliases = useMemo(() => {
+    const taken = new Set([
+      ...cloudAccounts.map((account) => account.alias?.toLowerCase()).filter(Boolean),
+      ...state.session.userAccounts.map((account) => account.alias?.toLowerCase()).filter(Boolean),
+    ]);
+    return ALIAS_POOL.filter((item) => !taken.has(item.toLowerCase()));
+  }, [cloudAccounts, state.session.userAccounts]);
+
+  useEffect(() => {
+    if (accountMode === "login" && alias && !loginAccounts.some((account) => account.alias === alias)) {
+      setAlias("");
+    }
+    if (accountMode === "create" && (!alias || !availableAliases.includes(alias))) {
+      setAlias(availableAliases[0] || "");
+    }
+  }, [accountMode, alias, availableAliases, loginAccounts]);
+
+  async function handleIdentitySubmit(event) {
     event.preventDefault();
     const cleanAlias = alias.trim();
+    setSubmitting(true);
+    setIdentityError("");
+    let verifiedAccount = null;
     if (accountMode === "create") {
-      const duplicateAlias = state.session.userAccounts.some((account) => account.alias.toLowerCase() === cleanAlias.toLowerCase());
-      const duplicatePin = state.session.userAccounts.some((account) => account.pin === userPin);
-      if (duplicateAlias || duplicatePin) {
-        setIdentityError(duplicateAlias ? "This alias has already been created." : "This 4-digit PIN is already assigned.");
+      const duplicateAlias = [...state.session.userAccounts, ...cloudAccounts].some((account) => account.alias.toLowerCase() === cleanAlias.toLowerCase());
+      if (duplicateAlias) {
+        setIdentityError("This alias has already been created.");
+        setSubmitting(false);
         return;
       }
-      addUserAccount({ alias: cleanAlias, pin: userPin });
+      const created = await createCloudAccount(cleanAlias, userPin);
+      if (!created?.ok) {
+        setIdentityError(created?.error || "Unable to create this account.");
+        setSubmitting(false);
+        return;
+      }
+      if (created?.existing) {
+        setIdentityError("This alias has already been created.");
+        const accounts = await listCloudAccounts();
+        setCloudAccounts(accounts);
+        setSubmitting(false);
+        return;
+      }
+      addUserAccount({ id: created?.account?.id, alias: cleanAlias, pin: userPin, participantCode: created?.account?.participantCode });
+      verifiedAccount = created.account;
+      setCloudAccounts((accounts) => created?.account
+        ? [...accounts.filter((account) => account.id !== created.account.id), created.account]
+        : accounts);
+    } else {
+      const login = await loginCloudAccount(cleanAlias, userPin);
+      if (!login.ok) {
+        setIdentityError(login.error);
+        setSubmitting(false);
+        return;
+      }
+      verifiedAccount = login.account;
+      if (!state.session.userAccounts.some((account) => account.id === verifiedAccount.id)) {
+        addUserAccount({ id: verifiedAccount.id, alias: verifiedAccount.alias, pin: userPin, participantCode: verifiedAccount.participantCode });
+      }
     }
+    setAuthenticatedAccount(verifiedAccount);
     setIdentityError("");
-    setPendingUserIdentity(cleanAlias, userPin);
+    setPendingUserIdentity(verifiedAccount.alias, userPin);
+    setAlias(verifiedAccount.alias);
+    setSubmitting(false);
     setStep(2);
   }
 
-  function handleJoinSubmit(event) {
+  async function handleJoinSubmit(event) {
     event.preventDefault();
-    joinSession(pin, userPin);
+    setSubmitting(true);
+    await joinSession(pin, userPin, authenticatedAccount.alias, authenticatedAccount);
+    setSubmitting(false);
   }
 
   return (
@@ -49,14 +126,18 @@ export function JoinSession() {
               <h2>Login details</h2>
               <select
                 value={alias}
-                onChange={(event) => setAlias(event.target.value)}
+                onChange={(event) => {
+                  setAlias(event.target.value);
+                  setUserPin("");
+                  setAuthenticatedAccount(null);
+                }}
                 aria-label="Assigned alias"
-                disabled={accountMode === "login" && state.session.userAccounts.length === 0}
+                disabled={accountMode === "login" && loginAccounts.length === 0}
               >
-                {accountMode === "login" && state.session.userAccounts.length === 0 ? (
-                  <option value="">No accounts created yet</option>
+                {accountMode === "login" ? (
+                  <option value="">{loginAccounts.length === 0 ? "No accounts created yet" : "Select an account"}</option>
                 ) : null}
-                {(accountMode === "login" ? state.session.userAccounts : ALIAS_POOL).map((item) => {
+                {(accountMode === "login" ? loginAccounts : availableAliases).map((item) => {
                   const value = typeof item === "string" ? item : item.alias;
                   const key = typeof item === "string" ? item : item.id;
                   return <option key={key} value={value}>{formatAlias(value)}</option>;
@@ -69,9 +150,11 @@ export function JoinSession() {
                 maxLength={4}
                 inputMode="numeric"
                 aria-label="User PIN"
+                disabled={!alias}
               />
-              <button type="submit" disabled={!alias.trim() || userPin.length !== 4}>
-                {accountMode === "login" ? "Continue" : "Create"}
+              {!alias ? <small className="identity-hint">Select an account before entering its PIN.</small> : null}
+              <button type="submit" disabled={!alias.trim() || userPin.length !== 4 || submitting}>
+                {submitting ? "Checking..." : accountMode === "login" ? "Access account" : "Create account"}
               </button>
             </form>
             {identityError ? <strong className="join-error">{identityError}</strong> : null}
@@ -82,10 +165,12 @@ export function JoinSession() {
                 const nextMode = accountMode === "login" ? "create" : "login";
                 setAccountMode(nextMode);
                 const source = nextMode === "login"
-                  ? state.session.userAccounts[0]?.alias
-                  : ALIAS_POOL.find((item) => !state.session.userAccounts.some((account) => account.alias === item)) || ALIAS_POOL[0];
+                  ? ""
+                  : availableAliases[0] || "";
                 setAlias(source || "");
                 setUserPin("");
+                setAuthenticatedAccount(null);
+                setIdentityError("");
               }}
             >
               {accountMode === "login" ? "Create new account" : "Use existing created account"}
@@ -94,7 +179,7 @@ export function JoinSession() {
         ) : (
           <>
             <h1>Join Session</h1>
-            <p>Signed in as <strong>{formatAlias(alias)}</strong>. Enter the 6-letter session PIN shown by the admin.</p>
+            <p>Account verified as <strong>{formatAlias(authenticatedAccount?.alias || alias)}</strong>. Now enter the 6-letter session PIN shown by the admin.</p>
             <form className="session-pin-form" onSubmit={handleJoinSubmit}>
               <input
                 value={pin}
@@ -103,14 +188,19 @@ export function JoinSession() {
                 maxLength={6}
                 aria-label="Session PIN"
               />
-              <button type="submit" disabled={pin.length !== 6}>Join</button>
-              <button type="button" className="join-back-btn" onClick={() => setStep(1)}>Back</button>
+              <button type="submit" disabled={pin.length !== 6 || !authenticatedAccount || submitting}>{submitting ? "Joining..." : "Join"}</button>
+              <button type="button" className="join-back-btn" onClick={() => {
+                setStep(1);
+                setPin("");
+                setUserPin("");
+                setAuthenticatedAccount(null);
+              }}>Back</button>
             </form>
           </>
         )}
         {state.session.joinError ? <strong className="join-error">{state.session.joinError}</strong> : null}
         <p className="join-note">
-          Prototype note: cross-device joining will use Cloudflare session storage. This browser build enforces the PIN and 6-device model locally.
+          Cross-device sessions require the deployed Worker URL so the admin and user laptops share the same session PIN.
         </p>
       </section>
     </main>

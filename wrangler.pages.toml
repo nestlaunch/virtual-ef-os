@@ -1,0 +1,13 @@
+name = "dailydigital"
+compatibility_date = "2026-06-01"
+pages_build_output_dir = "./dist"
+
+[vars]
+ALLOWED_ORIGINS = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "daily-digital-db"
+database_id = "f2be7300-f5c9-4fa6-8621-326f6b32a73b"
+migrations_dir = "migrations"
+

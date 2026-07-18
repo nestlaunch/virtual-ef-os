@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { APP_CATALOG } from "../../state/v2Assessment";
+import { APP_CATALOG, LEARN_APP_CATALOG, SCENARIO_LIBRARY, SESSION_MODES } from "../../state/v2Assessment";
 import { weeklyRules } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { getDoctorAppointmentTarget } from "../taskAnswerChecks";
@@ -173,9 +173,25 @@ function hasUserWhatsappConfirmation(state, accountId, threadId) {
 }
 
 export function SettingsApp() {
-  const { state, helpers, resetEvaluation, markEvaluationCompleted } = useVirtualOS();
+  const { state, helpers, resetEvaluation, markEvaluationCompleted, startLocalMode } = useVirtualOS();
   const containerRef = useRef(null);
   const [atBottom, setAtBottom] = useState(false);
+  const currentMode = state.session.userModes[state.session.currentUserId] || state.session.mode;
+  const scenarioOptions = SCENARIO_LIBRARY.filter((scenario) => scenario.id && scenario.title);
+  const activeAssignment = currentMode === "practice" || currentMode === "assessment"
+    ? state.session.assignments?.[state.session.currentUserId]?.filter((item) => item.mode === currentMode).at(-1)
+    : null;
+  const activeScenarioId = activeAssignment?.scenarioId || state.workspace?.localSetup?.scenarioId || scenarioOptions[0]?.id || "";
+  const activeLearnApp = state.session.learnModules?.[state.session.currentUserId] || state.workspace?.localSetup?.app || LEARN_APP_CATALOG[0]?.currentApp || "home";
+  const [quickMode, setQuickMode] = useState(currentMode || "practice");
+  const [quickScenarioId, setQuickScenarioId] = useState(activeScenarioId);
+  const [quickLearnApp, setQuickLearnApp] = useState(activeLearnApp);
+
+  useEffect(() => {
+    setQuickMode(currentMode || "practice");
+    setQuickScenarioId(activeScenarioId);
+    setQuickLearnApp(activeLearnApp);
+  }, [activeLearnApp, activeScenarioId, currentMode]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -281,10 +297,31 @@ export function SettingsApp() {
   const totalTimeMs = state.session.completedAt ? state.session.completedAt - state.session.startedAt : null;
   const planningTimeMs = state.session.firstEntryAt ? state.session.firstEntryAt - state.session.startedAt : null;
   const activeDurationMs = now - state.session.startedAt;
-  const currentMode = state.session.userModes[state.session.currentUserId] || state.session.mode;
   const learn = state.learnMetrics || {};
   const attempts = learn.attempts || { correct: 0, total: 0 };
   const activeLearnApps = new Set(Object.values(state.session.learnModules || {}));
+  const isLocalMode = state.workspace?.mode === "local";
+  const quickModeDefinition = SESSION_MODES.find((item) => item.id === quickMode) || SESSION_MODES[0];
+  const quickScenario = scenarioOptions.find((scenario) => scenario.id === quickScenarioId) || scenarioOptions[0];
+  const canApplyQuickChange = quickMode === "learn"
+    ? Boolean(quickLearnApp)
+    : quickMode === "practice" || quickMode === "assessment"
+      ? Boolean(quickScenarioId)
+      : true;
+
+  function applyQuickScenarioChange(event) {
+    event.preventDefault();
+    if (!canApplyQuickChange) {
+      return;
+    }
+    const nextOptions = {
+      mode: quickMode,
+      scenarioId: quickMode === "practice" || quickMode === "assessment" ? quickScenarioId : "",
+      app: quickMode === "learn" ? quickLearnApp : "",
+      currentApp: "settings",
+    };
+    startLocalMode(nextOptions);
+  }
 
   function handleReset() {
     if (!atBottom) {
@@ -307,6 +344,20 @@ export function SettingsApp() {
     return (
       <div className="settings-app" ref={containerRef}>
         <h2>Learn Evaluation</h2>
+        {isLocalMode ? (
+          <QuickScenarioSettings
+            mode={quickMode}
+            setMode={setQuickMode}
+            scenarioId={quickScenarioId}
+            setScenarioId={setQuickScenarioId}
+            learnApp={quickLearnApp}
+            setLearnApp={setQuickLearnApp}
+            modeDefinition={quickModeDefinition}
+            selectedScenario={quickScenario}
+            canApply={canApplyQuickChange}
+            onApply={applyQuickScenarioChange}
+          />
+        ) : null}
         <section className="learn-evaluation-panel">
           <h3>Learning Outcomes</h3>
           <div className="learn-eval-summary">
@@ -351,6 +402,20 @@ export function SettingsApp() {
   return (
     <div className="settings-app" ref={containerRef}>
       <h2>Evaluation</h2>
+      {isLocalMode ? (
+        <QuickScenarioSettings
+          mode={quickMode}
+          setMode={setQuickMode}
+          scenarioId={quickScenarioId}
+          setScenarioId={setQuickScenarioId}
+          learnApp={quickLearnApp}
+          setLearnApp={setQuickLearnApp}
+          modeDefinition={quickModeDefinition}
+          selectedScenario={quickScenario}
+          canApply={canApplyQuickChange}
+          onApply={applyQuickScenarioChange}
+        />
+      ) : null}
       <section>
         <h3>Weekly Constraints</h3>
         <ul>
@@ -430,5 +495,79 @@ export function SettingsApp() {
         </button>
       </section>
     </div>
+  );
+}
+
+function QuickScenarioSettings({
+  mode,
+  setMode,
+  scenarioId,
+  setScenarioId,
+  learnApp,
+  setLearnApp,
+  modeDefinition,
+  selectedScenario,
+  canApply,
+  onApply,
+}) {
+  const needsScenario = mode === "practice" || mode === "assessment";
+
+  return (
+    <section className="quick-scenario-settings">
+      <div className="quick-scenario-heading">
+        <div>
+          <h3>Change Scenario</h3>
+          <p>Switch the local task without returning to the main page.</p>
+        </div>
+      </div>
+      <form onSubmit={onApply}>
+        <label>
+          <span>Mode</span>
+          <select value={mode} onChange={(event) => setMode(event.target.value)}>
+            {SESSION_MODES.map((item) => (
+              <option key={item.id} value={item.id}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+
+        {mode === "learn" ? (
+          <label>
+            <span>Module</span>
+            <select value={learnApp} onChange={(event) => setLearnApp(event.target.value)}>
+              {LEARN_APP_CATALOG.map((app) => (
+                <option key={app.id} value={app.currentApp}>{app.label}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {needsScenario ? (
+          <label>
+            <span>Scenario</span>
+            <select value={scenarioId} onChange={(event) => setScenarioId(event.target.value)}>
+              {SCENARIO_LIBRARY.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>{scenario.title}</option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <div className="quick-scenario-summary">
+            <strong>{modeDefinition?.label || "Free"}</strong>
+            <p>{modeDefinition?.description || "Interactions will still be logged."}</p>
+          </div>
+        )}
+
+        {needsScenario && selectedScenario ? (
+          <div className="quick-scenario-summary">
+            <strong>{selectedScenario.title}</strong>
+            <p>{selectedScenario.description}</p>
+          </div>
+        ) : null}
+
+        <button type="submit" disabled={!canApply}>
+          Apply Scenario
+        </button>
+      </form>
+    </section>
   );
 }

@@ -1,15 +1,16 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from "react";
 import { formalThreads, initialEvents, calendarMeta } from "./seedData";
-import { APP_CATALOG, SCENARIO_LIBRARY, createInitialChecklistScores } from "./v2Assessment";
-import { createDeviceId, createParticipantPin, createSessionPin, liveStateStorageKey, loadLocalDeviceState, loadStoredLiveState, loadStoredSession, saveLocalDeviceState, saveStoredLiveState, saveStoredSession } from "./sessionStore";
+import { APP_CATALOG, SCENARIO_LIBRARY, getChecklistScoresForAccount } from "./v2Assessment";
+import { createDeviceId, createParticipantPin, createSessionPin, loadLocalDeviceState, loadStoredLiveState, loadStoredSession, saveLocalDeviceState, saveStoredLiveState, saveStoredSession } from "./sessionStore";
 import { summarizeInteractions } from "./sessionMetrics";
 import { applyLearnModuleAssignment, applyModeSelection, applyScenarioAssignment, attachExperienceRatingToRecords, canJoinActiveSession, clearEndedSessionForPush, getCurrentAssignment, invalidateCompletedSessionPin, preserveLocalSessionIdentity, resetSessionForNewPin, resolveInitialCurrentApp, resolvePushTargets, shouldAdoptSharedApp, startAssessmentTiming } from "./sessionLifecycle";
-import { baseLearnMetrics, mergeLearnAccountMetrics, mergeLearnMetrics, updateLearnAccuracy } from "./learnMetrics";
+import { mergeLearnAccountMetrics, mergeLearnMetrics, updateLearnAccuracy } from "./learnMetrics";
 import { appendParticipantProgressRecord, createTaskEvidenceSnapshot, getParticipantScenarioRecord } from "./progressRecords";
 import { removeAccountsFromByAccount } from "./modeMetrics";
-import { getCloudSyncIntervalMs, syncCloudState } from "./cloudSync";
+import { prepareCloudJoin } from "./cloudSync";
+import { baseAssessmentAccountMetrics, baseAssessmentMetrics, baseMetrics, basePracticeAccountMetrics, basePracticeMetrics, countCalendarErrors, getAssessmentAccountMetrics, getPracticeAccountMetrics, mergeAssessmentMetrics, mergePracticeMetrics, minutesToClock, progressRecordDeps, recalcMetrics, resetCalendarForTaskChange, resetEvaluationState } from "./runtimeState";
+import { useVirtualOSCloudSync } from "./useVirtualOSCloudSync";
 
-const MINUTES_PER_DAY = 24 * 60;
 const CLOCK_SPEED = 6;
 
 const rigidAppointments = formalThreads
@@ -22,6 +23,32 @@ const storedLiveState = loadStoredLiveState();
 const localDeviceState = loadLocalDeviceState();
 const storedEffectiveSession = storedLiveState?.session || storedSession;
 const initialPin = storedEffectiveSession?.pin || createSessionPin();
+
+function getPerfNow() {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
+}
+
+function createSessionAnchor(wallClock = Date.now()) {
+  return { wallClock, perfNow: getPerfNow() };
+}
+
+function normalizeSessionAnchor(session) {
+  const anchor = session?.clockAnchor || session?.sessionAnchor;
+  if (anchor && Number.isFinite(anchor.wallClock) && Number.isFinite(anchor.perfNow)) {
+    return anchor;
+  }
+  return createSessionAnchor(session?.startedAt || Date.now());
+}
+
+function getSessionTime(state) {
+  const anchor = normalizeSessionAnchor(state.session);
+  const eventPerfMs = Math.max(0, getPerfNow() - anchor.perfNow);
+  return {
+    at: Math.round(anchor.wallClock + eventPerfMs),
+    eventPerfMs: Math.round(eventPerfMs),
+    eventWallMs: Math.round(anchor.wallClock + eventPerfMs),
+  };
+}
 
 const initialState = {
   session: {
@@ -50,6 +77,7 @@ const initialState = {
     startedAt: storedLiveState?.session?.startedAt || Date.now(),
     firstEntryAt: storedLiveState?.session?.firstEntryAt || null,
     completedAt: storedLiveState?.session?.completedAt || null,
+    clockAnchor: createSessionAnchor(storedEffectiveSession?.startedAt || Date.now()),
   },
   workspace: {
     view: "admin",
@@ -113,122 +141,20 @@ const initialState = {
   learnMetrics: mergeLearnMetrics(storedLiveState?.learnMetrics),
   practiceMetrics: mergePracticeMetrics(storedLiveState?.practiceMetrics),
   assessmentMetrics: mergeAssessmentMetrics(storedLiveState?.assessmentMetrics),
-  checklistScores: storedLiveState?.checklistScores || createInitialChecklistScores(),
+  checklistScoresByAccount: storedLiveState?.checklistScoresByAccount || {},
   adminNotes: storedLiveState?.adminNotes || "",
   cueLog: storedLiveState?.cueLog || [],
   hiddenLog: storedLiveState?.hiddenLog || [],
 };
 
-function minutesToClock(minutes) {
-  const normalized = ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
-  const h = String(Math.floor(normalized / 60)).padStart(2, "0");
-  const m = String(normalized % 60).padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-function overlaps(a, b) {
-  if ((a.month ?? calendarMeta.todayMonth) !== (b.month ?? calendarMeta.todayMonth)) {
-    return false;
-  }
-  return a.date === b.date && a.start < b.end && b.start < a.end;
-}
-
-function capturesAppointment(event, appointment) {
-  const eventYear = event.year ?? calendarMeta.todayYear;
-  const eventMonth = event.month ?? calendarMeta.todayMonth;
-  const appointmentYear = appointment.year ?? calendarMeta.todayYear;
-  const appointmentMonth = appointment.month ?? calendarMeta.todayMonth;
-  return eventYear === appointmentYear
-    && eventMonth === appointmentMonth
-    && event.date === appointment.date
-    && event.start <= appointment.start
-    && event.end >= appointment.end;
-}
-
-function calculateRuleBreaking(events) {
-  let violations = 0;
-  const buckets = events.reduce((acc, event) => {
-    const key = `${event.year ?? calendarMeta.todayYear}-${event.month ?? calendarMeta.todayMonth}-${event.date}`;
-    if (!acc[key]) {
-      acc[key] = [];
-    }
-    acc[key].push(event);
-    return acc;
-  }, {});
-
-  Object.values(buckets).forEach((dayEvents) => {
-    const sorted = [...dayEvents].sort((a, b) => a.start - b.start);
-    if (sorted.length > 4) {
-      violations += sorted.length - 4;
-    }
-    for (let i = 1; i < sorted.length; i += 1) {
-      if (sorted[i].start - sorted[i - 1].end < 30) {
-        violations += 1;
-      }
-    }
-  });
-
-  events.forEach((a, idx) => {
-    if (a.rigid || a.source === "SMS") {
-      return;
-    }
-    for (let j = 0; j < events.length; j += 1) {
-      if (idx === j) {
-        continue;
-      }
-      const b = events[j];
-      if ((b.rigid || b.source === "SMS") && overlaps(a, b)) {
-        violations += 1;
-      }
-    }
-  });
-
-  return violations;
-}
-
-function countIncompleteErrors(events) {
-  return events.filter((event) => {
-    const missingName = !String(event.title || "").trim() || String(event.title || "").trim().toLowerCase() === "untitled";
-    const missingDuration = typeof event.end !== "number" || typeof event.start !== "number" || event.end <= event.start;
-    return missingName || missingDuration;
-  }).length;
-}
-
-function getEventsForAccount(events, accountId) {
-  return events.filter((event) => !event.accountId || !accountId || event.accountId === accountId);
-}
-
-function countCalendarErrors(state) {
-  const accountEvents = getEventsForAccount(state.events, state.session.currentUserId);
-  const omissionErrors = rigidAppointments.filter((appointment) => (
-    !state.scheduledSourceIds.includes(appointment.id)
-    && !accountEvents.some((event) => event.source === "Calendar" && capturesAppointment(event, appointment))
-  )).length;
-  return omissionErrors + calculateRuleBreaking(accountEvents) + countIncompleteErrors(accountEvents);
-}
-
-function recalcMetrics(state) {
-  const accountEvents = getEventsForAccount(state.events, state.session.currentUserId);
-  const omissionErrors = rigidAppointments.filter((appointment) => (
-    !state.scheduledSourceIds.includes(appointment.id)
-    && !accountEvents.some((event) => event.source === "Calendar" && capturesAppointment(event, appointment))
-  )).length;
-  const ruleBreaking = calculateRuleBreaking(accountEvents);
-  return {
-    ...state.metrics,
-    omissionErrors,
-    ruleBreaking,
-    contextSwitches: state.contextSwitches,
-  };
-}
-
 function appendLog(state, entry) {
   const accountId = entry.accountId || state.session.currentUserId || null;
   const mode = accountId ? state.session.userModes?.[accountId] || state.session.mode : state.session.mode;
-  return [...state.hiddenLog.slice(-399), { at: Date.now(), simClock: minutesToClock(state.currentMinutes), accountId, mode, ...entry }];
+  const sessionTime = getSessionTime(state);
+  return [...state.hiddenLog.slice(-399), { ...sessionTime, simClock: minutesToClock(state.currentMinutes), accountId, mode, ...entry }];
 }
 
-function markFirstAction(state, at = Date.now()) {
+function markFirstAction(state, at = getSessionTime(state).eventWallMs) {
   if (state.interactionMetrics.timeToFirstActionMs !== null) {
     return state.interactionMetrics;
   }
@@ -264,99 +190,6 @@ function getCurrentLearnApp(state) {
   return mode === "learn" ? state.session.learnModules?.[userId] || null : null;
 }
 
-function baseMetrics() {
-  return {
-    omissionErrors: rigidAppointments.length,
-    perseveration: 0,
-    ruleBreaking: 0,
-    contextSwitches: 0,
-    whatsappReplies: {},
-    whatsappConfirmed: {},
-    whatsappFriendConfirmed: {},
-    correctedErrors: 0,
-    inhibitionFailure: {
-      noiseMs: 0,
-      taskMs: 0,
-    },
-  };
-}
-
-function basePracticeMetrics() {
-  return {
-    byAccount: {},
-  };
-}
-
-function basePracticeAccountMetrics() {
-  return {
-    scenarioId: "",
-    assignmentId: "",
-    startedAt: null,
-    completedAt: null,
-    attempt: 1,
-    supportMode: "checklist",
-    completedSteps: [],
-    promptCount: 0,
-    highestPromptLevel: 0,
-    promptHistory: [],
-    wrongStepAttempts: 0,
-    answerAttempts: 0,
-    correctAnswers: 0,
-    checklistCompleted: false,
-    hiddenCompleted: false,
-  };
-}
-
-function baseAssessmentMetrics() {
-  return {
-    byAccount: {},
-  };
-}
-
-function baseAssessmentAccountMetrics() {
-  return {
-    scenarioId: "",
-    assignmentId: "",
-    startedAt: null,
-    startedByUserAt: null,
-    completedAt: null,
-    lastActionAt: null,
-    timeToFirstActionMs: null,
-    actionCount: 0,
-    tapCount: 0,
-    actionIntervalsMs: [],
-    stuckAlerts: [],
-    lastStuckAlertAt: null,
-    promptHistory: [],
-    currentPrompt: null,
-    highestPromptLevel: 0,
-    promptResponseTimesMs: [],
-    answerAttempts: 0,
-    correctAnswers: 0,
-    completedSteps: [],
-  };
-}
-
-function mergeAssessmentMetrics(metrics) {
-  const base = baseAssessmentMetrics();
-  const byAccount = Object.entries(metrics?.byAccount || {}).reduce((acc, [accountId, accountMetrics]) => {
-    acc[accountId] = { ...baseAssessmentAccountMetrics(), ...(accountMetrics || {}) };
-    return acc;
-  }, {});
-  return {
-    ...base,
-    ...(metrics || {}),
-    byAccount,
-  };
-}
-
-function getAssessmentAccountMetrics(state, accountId) {
-  return {
-    ...baseAssessmentAccountMetrics(),
-    ...(state.assessmentMetrics?.byAccount?.[accountId] || {}),
-  };
-}
-
 function isAssessmentModeForAccount(state, accountId) {
   if (!accountId) return false;
   return (state.session.userModes?.[accountId] || state.session.mode) === "assessment";
@@ -367,7 +200,7 @@ function updateAssessmentAction(state, actionKind) {
   if (!accountId || !isAssessmentModeForAccount(state, accountId)) {
     return state;
   }
-  const now = Date.now();
+  const now = getSessionTime(state).eventWallMs;
   const assessmentMetrics = mergeAssessmentMetrics(state.assessmentMetrics);
   const current = getAssessmentAccountMetrics(state, accountId);
   const interval = current.lastActionAt ? now - current.lastActionAt : null;
@@ -396,110 +229,6 @@ function updateAssessmentAction(state, actionKind) {
         ...assessmentMetrics.byAccount,
         [accountId]: nextAccountMetrics,
       },
-    },
-  };
-}
-
-function mergePracticeMetrics(metrics) {
-  const base = basePracticeMetrics();
-  const byAccount = Object.entries(metrics?.byAccount || {}).reduce((acc, [accountId, accountMetrics]) => {
-    acc[accountId] = { ...basePracticeAccountMetrics(), ...(accountMetrics || {}) };
-    return acc;
-  }, {});
-  return {
-    ...base,
-    ...(metrics || {}),
-    byAccount,
-  };
-}
-
-function getPracticeAccountMetrics(state, accountId) {
-  return {
-    ...basePracticeAccountMetrics(),
-    ...(state.practiceMetrics?.byAccount?.[accountId] || {}),
-  };
-}
-
-function progressRecordDeps() {
-  return {
-    rigidAppointments,
-    getEventsForAccount,
-    capturesAppointment,
-    calculateRuleBreaking,
-  };
-}
-
-function resetEvaluationState(state) {
-  return {
-    ...state,
-    currentApp: "home",
-    appHistory: [],
-    tabSwitcherOpen: false,
-    events: initialEvents,
-    scheduledSourceIds: initialEvents.map((event) => event.sourceId).filter(Boolean),
-    contextSwitches: 0,
-    appMutations: {
-      calendar: 0,
-      sms: 0,
-      whatsapp: 0,
-      maps: 0,
-      bank: 0,
-      singpass: 0,
-      settings: 0,
-      home: 0,
-    },
-    lastOpenMutationSnapshot: {
-      calendar: 0,
-      sms: 0,
-      whatsapp: 0,
-      maps: 0,
-      bank: 0,
-      singpass: 0,
-      settings: 0,
-      home: 0,
-    },
-    metrics: baseMetrics(),
-    interactionMetrics: {
-      clicks: 0,
-      inputFocuses: 0,
-      typingStarts: 0,
-      typingLatencyTotalMs: 0,
-      typingLatencySamples: 0,
-      backPresses: 0,
-      homePresses: 0,
-      recentPresses: 0,
-      cueCount: 0,
-      timeToFirstActionMs: null,
-    },
-    singpass: {
-      transaction: null,
-    },
-      learnMetrics: baseLearnMetrics(),
-      practiceMetrics: basePracticeMetrics(),
-      assessmentMetrics: baseAssessmentMetrics(),
-      checklistScores: createInitialChecklistScores(),
-    adminNotes: "",
-    cueLog: [],
-    hiddenLog: [],
-  };
-}
-
-function resetCalendarForTaskChange(state) {
-  return {
-    ...state,
-    events: initialEvents,
-    scheduledSourceIds: initialEvents.map((event) => event.sourceId).filter(Boolean),
-    appMutations: {
-      ...state.appMutations,
-      calendar: 0,
-    },
-    lastOpenMutationSnapshot: {
-      ...state.lastOpenMutationSnapshot,
-      calendar: 0,
-    },
-    metrics: baseMetrics(),
-    singpass: {
-      transaction: null,
     },
   };
 }
@@ -533,15 +262,17 @@ function reducer(state, action) {
     case "CREATE_SESSION": {
       const pin = createSessionPin();
       const deviceId = state.session.deviceId || createDeviceId();
+      const now = Date.now();
       const next = {
         ...state,
         session: resetSessionForNewPin(state.session, {
           pin,
           deviceId,
-          startedAt: Date.now(),
+          startedAt: now,
+          clockAnchor: createSessionAnchor(now),
         }),
       };
-      const resetState = resetEvaluationState(next);
+      const resetState = resetEvaluationState(next, rigidAppointments);
       return persistSessionState({ ...resetState, hiddenLog: appendLog(resetState, { kind: "create_session", pin }) });
     }
     case "JOIN_SESSION": {
@@ -566,14 +297,16 @@ function reducer(state, action) {
           },
         };
       }
-      let account = state.session.userAccounts.find((item) => item.pin === participantPin && item.alias.toLowerCase() === alias.toLowerCase());
-      const pinTakenByOtherAlias = state.session.userAccounts.some((item) => item.pin === participantPin && item.alias.toLowerCase() !== alias.toLowerCase());
-      if (!account && pinTakenByOtherAlias) {
+      let account = action.account?.id && String(action.account.alias || "").trim().toLowerCase() === alias.toLowerCase()
+        ? { ...action.account, alias, pin: participantPin }
+        : state.session.userAccounts.find((item) => item.pin === participantPin && item.alias.toLowerCase() === alias.toLowerCase());
+      const existingAliasAccount = state.session.userAccounts.find((item) => item.alias.toLowerCase() === alias.toLowerCase());
+      if (!account && existingAliasAccount?.pin) {
         return {
           ...state,
           session: {
             ...state.session,
-            joinError: "This 4-digit user PIN is already assigned to another alias.",
+            joinError: "Incorrect 4-digit PIN for this alias.",
           },
         };
       }
@@ -584,9 +317,12 @@ function reducer(state, action) {
           pin: participantPin,
         };
       }
-      const userAccounts = state.session.userAccounts.some((item) => item.id === account.id)
-        ? state.session.userAccounts
-        : [...state.session.userAccounts, account];
+      const userAccounts = [
+        ...state.session.userAccounts.filter((item) => (
+          item.id !== account.id && item.alias.toLowerCase() !== account.alias.toLowerCase()
+        )),
+        account,
+      ];
       const deviceId = state.session.deviceId || createDeviceId();
       const existing = state.session.participants.some((participant) => participant.accountId === account.id);
       const joinedUserCount = state.session.participants.filter((participant) => participant.role === "patient").length;
@@ -634,6 +370,157 @@ function reducer(state, action) {
       };
       return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "join_session", pin, user: account.alias }) });
     }
+    case "START_LOCAL_MODE": {
+      const now = Date.now();
+      const deviceId = state.session.deviceId || createDeviceId();
+      const mode = ["learn", "practice", "assessment", "free"].includes(action.mode) ? action.mode : "practice";
+      const account = {
+        id: "local-user",
+        alias: "Local Practice",
+        pin: "",
+      };
+      const participant = {
+        id: deviceId,
+        accountId: account.id,
+        label: account.alias,
+        alias: account.alias,
+        joinedAt: now,
+        lastSeenAt: now,
+        role: "patient",
+        deviceId,
+        currentApp: action.currentApp || "home",
+        mode,
+        activeScenarioId: "",
+      };
+      let next = {
+        ...resetEvaluationState({
+        ...state,
+        currentApp: action.currentApp || "home",
+        appHistory: [],
+        tabSwitcherOpen: false,
+        workspace: {
+          ...state.workspace,
+          mode: "local",
+          localSetup: {
+            mode,
+            scenarioId: action.scenarioId || "",
+            app: action.app || "",
+          },
+        },
+        session: {
+          ...state.session,
+          mode,
+          joined: true,
+          joinError: "",
+          deviceId,
+          currentUserId: account.id,
+          userAccounts: [account],
+          participants: [participant],
+          assignments: {},
+          userModes: { [account.id]: mode },
+          learnModules: {},
+          readStimuli: [],
+          dismissedStimuli: [],
+          completedAt: null,
+          endingStartedAt: null,
+          endedAt: null,
+          startedAt: now,
+          clockAnchor: createSessionAnchor(now),
+        },
+        }, rigidAppointments),
+        currentApp: action.currentApp || "home",
+        appHistory: action.currentApp && action.currentApp !== "home" ? ["home", action.currentApp] : [],
+        tabSwitcherOpen: false,
+      };
+
+      if (mode === "learn") {
+        const app = action.app || "home";
+        const learnMetrics = mergeLearnMetrics(next.learnMetrics);
+        const accountMetrics = mergeLearnAccountMetrics(learnMetrics.byAccount?.[account.id]);
+        const assignmentResult = applyLearnModuleAssignment(next.session, {
+          accountId: account.id,
+          app,
+          assignmentId: `learn-${now}`,
+          now,
+        });
+        if (assignmentResult) {
+          next = {
+            ...next,
+            currentApp: action.currentApp || app,
+            appHistory: action.currentApp && action.currentApp !== "home" ? ["home", action.currentApp] : app === "home" ? [] : ["home"],
+            session: assignmentResult.session,
+            learnMetrics: {
+              ...learnMetrics,
+              moduleStarts: {
+                ...learnMetrics.moduleStarts,
+                [app]: now,
+              },
+              byAccount: {
+                ...learnMetrics.byAccount,
+                [account.id]: {
+                  ...accountMetrics,
+                  moduleStarts: {
+                    ...accountMetrics.moduleStarts,
+                    [app]: now,
+                  },
+                },
+              },
+            },
+          };
+        }
+      }
+
+      if (mode === "practice" || mode === "assessment") {
+        const scenario = [...SCENARIO_LIBRARY, ...state.session.customScenarios].find((item) => item.id === action.scenarioId) || SCENARIO_LIBRARY[0];
+        if (scenario) {
+          const assignmentResult = applyScenarioAssignment(next.session, {
+            mode,
+            scenarioId: scenario.id,
+            targets: [account.id],
+            assignmentId: `${mode === "assessment" ? "assess" : "assign"}-${now}`,
+            now,
+            firstCurrentApp: "home",
+          });
+          const practiceMetrics = mergePracticeMetrics(next.practiceMetrics);
+          const assessmentMetrics = mergeAssessmentMetrics(next.assessmentMetrics);
+          next = {
+            ...next,
+            session: assignmentResult.session,
+            practiceMetrics: mode === "practice"
+              ? {
+                  ...practiceMetrics,
+                  byAccount: {
+                    ...practiceMetrics.byAccount,
+                    [account.id]: {
+                      ...basePracticeAccountMetrics(),
+                      scenarioId: scenario.id,
+                      assignmentId: assignmentResult.assignment.id,
+                      startedAt: now,
+                    },
+                  },
+                }
+              : removeAccountsFromByAccount(practiceMetrics, [account.id]),
+            assessmentMetrics: mode === "assessment"
+              ? {
+                  ...assessmentMetrics,
+                  byAccount: {
+                    ...assessmentMetrics.byAccount,
+                    [account.id]: {
+                      ...baseAssessmentAccountMetrics(),
+                      scenarioId: scenario.id,
+                      assignmentId: assignmentResult.assignment.id,
+                      startedAt: now,
+                      lastActionAt: now,
+                    },
+                  },
+                }
+              : removeAccountsFromByAccount(assessmentMetrics, [account.id]),
+          };
+        }
+      }
+
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "start_local_mode", accountId: account.id, mode, scenarioId: action.scenarioId || "", app: action.app || "" }) });
+    }
     case "SET_PENDING_USER_IDENTITY": {
       const next = {
         ...state,
@@ -646,6 +533,14 @@ function reducer(state, action) {
       };
       return persistSessionState(next);
     }
+    case "SET_JOIN_ERROR":
+      return {
+        ...state,
+        session: {
+          ...state.session,
+          joinError: action.error || "",
+        },
+      };
     case "MARK_STIMULUS_READ": {
       if (!action.stimulusId || state.session.readStimuli.includes(action.stimulusId)) {
         return state;
@@ -679,7 +574,8 @@ function reducer(state, action) {
       }
       const learnApp = getCurrentLearnApp(state);
       const allowedSingpassHandoff = learnApp === "bank" && app === "singpass";
-      if (learnApp && app !== learnApp && !allowedSingpassHandoff) {
+      const allowedHomeNavigationPractice = learnApp === "home";
+      if (learnApp && app !== learnApp && !allowedSingpassHandoff && !allowedHomeNavigationPractice) {
         return persistSessionState({ ...state, hiddenLog: appendLog(state, { kind: "learn_app_blocked", attemptedApp: app, assignedApp: learnApp }) });
       }
       const baseInteractionMetrics = markFirstAction(state);
@@ -703,7 +599,7 @@ function reducer(state, action) {
         interactionMetrics: baseInteractionMetrics,
       };
       const withAssessment = updateAssessmentAction(next, "open_app");
-      const withMetrics = { ...withAssessment, metrics: recalcMetrics(withAssessment) };
+      const withMetrics = { ...withAssessment, metrics: recalcMetrics(withAssessment, rigidAppointments) };
       return persistSessionState({ ...withMetrics, hiddenLog: appendLog(withMetrics, { kind: "open_app", app }) });
     }
     case "GO_HOME": {
@@ -711,7 +607,7 @@ function reducer(state, action) {
         return { ...state, tabSwitcherOpen: false };
       }
       const learnApp = getCurrentLearnApp(state);
-      if (learnApp && state.currentApp !== "home") {
+      if (learnApp && learnApp !== "home" && state.currentApp !== "home") {
         return persistSessionState({ ...state, tabSwitcherOpen: false, hiddenLog: appendLog(state, { kind: "learn_home_blocked", assignedApp: learnApp }) });
       }
       const next = {
@@ -734,13 +630,13 @@ function reducer(state, action) {
         },
       };
       const withAssessment = updateAssessmentAction(next, "click");
-      const withMetrics = { ...withAssessment, metrics: recalcMetrics(withAssessment) };
+      const withMetrics = { ...withAssessment, metrics: recalcMetrics(withAssessment, rigidAppointments) };
       return persistSessionState({ ...withMetrics, hiddenLog: appendLog(withMetrics, { kind: "go_home" }) });
     }
     case "GO_BACK": {
       const prev = state.appHistory[state.appHistory.length - 1] || "home";
       const learnApp = getCurrentLearnApp(state);
-      if (learnApp && prev !== learnApp) {
+      if (learnApp && learnApp !== "home" && prev !== learnApp) {
         return persistSessionState({ ...state, hiddenLog: appendLog(state, { kind: "learn_back_blocked", assignedApp: learnApp }) });
       }
       if (prev === state.currentApp) {
@@ -762,7 +658,7 @@ function reducer(state, action) {
         },
       };
       const withAssessment = updateAssessmentAction(next, "click");
-      const withMetrics = { ...withAssessment, metrics: recalcMetrics(withAssessment) };
+      const withMetrics = { ...withAssessment, metrics: recalcMetrics(withAssessment, rigidAppointments) };
       return persistSessionState({ ...withMetrics, hiddenLog: appendLog(withMetrics, { kind: "go_back", to: prev }) });
     }
     case "TOGGLE_TABS":
@@ -808,11 +704,11 @@ function reducer(state, action) {
           calendar: state.appMutations.calendar + 1,
         },
       };
-      const withMetrics = { ...next, metrics: recalcMetrics(next) };
+      const withMetrics = { ...next, metrics: recalcMetrics(next, rigidAppointments) };
       return persistSessionState({ ...withMetrics, hiddenLog: appendLog(withMetrics, { kind: "add_event", eventId: event.id }) });
     }
     case "UPDATE_EVENT": {
-      const beforeErrors = countCalendarErrors(state);
+      const beforeErrors = countCalendarErrors(state, rigidAppointments);
       const nextEvents = state.events.map((event) => (event.id === action.id ? { ...event, ...action.patch, updatedAt: Date.now() } : event));
       const next = {
         ...state,
@@ -822,18 +718,18 @@ function reducer(state, action) {
           calendar: state.appMutations.calendar + 1,
         },
       };
-      const afterErrors = countCalendarErrors(next);
+      const afterErrors = countCalendarErrors(next, rigidAppointments);
       const withMetrics = {
         ...next,
         metrics: {
-          ...recalcMetrics(next),
+          ...recalcMetrics(next, rigidAppointments),
           correctedErrors: afterErrors < beforeErrors ? (state.metrics.correctedErrors || 0) + 1 : (state.metrics.correctedErrors || 0),
         },
       };
       return persistSessionState({ ...withMetrics, hiddenLog: appendLog(withMetrics, { kind: "update_event", eventId: action.id }) });
     }
     case "DELETE_EVENT": {
-      const beforeErrors = countCalendarErrors(state);
+      const beforeErrors = countCalendarErrors(state, rigidAppointments);
       const next = {
         ...state,
         events: state.events.filter((event) => event.id !== action.id),
@@ -842,11 +738,11 @@ function reducer(state, action) {
           calendar: state.appMutations.calendar + 1,
         },
       };
-      const afterErrors = countCalendarErrors(next);
+      const afterErrors = countCalendarErrors(next, rigidAppointments);
       const withMetrics = {
         ...next,
         metrics: {
-          ...recalcMetrics(next),
+          ...recalcMetrics(next, rigidAppointments),
           correctedErrors: afterErrors < beforeErrors ? (state.metrics.correctedErrors || 0) + 1 : (state.metrics.correctedErrors || 0),
         },
       };
@@ -892,12 +788,14 @@ function reducer(state, action) {
       return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "wa_friend_confirm", threadId: action.threadId }) });
     }
     case "RESET_EVALUATION": {
-      return persistSessionState({
+      const now = Date.now();
+      const next = {
         ...state,
         session: {
           ...state.session,
           joined: true,
-          startedAt: Date.now(),
+          startedAt: now,
+          clockAnchor: createSessionAnchor(now),
           firstEntryAt: null,
           completedAt: null,
           endingStartedAt: null,
@@ -906,53 +804,8 @@ function reducer(state, action) {
           dismissedStimuli: [],
           learnModules: {},
         },
-        events: initialEvents,
-        scheduledSourceIds: initialEvents.map((event) => event.sourceId).filter(Boolean),
-        contextSwitches: 0,
-        appMutations: {
-          calendar: 0,
-          sms: 0,
-          whatsapp: 0,
-          maps: 0,
-          bank: 0,
-          singpass: 0,
-          settings: 0,
-          home: 0,
-        },
-        lastOpenMutationSnapshot: {
-          calendar: 0,
-          sms: 0,
-          whatsapp: 0,
-          maps: 0,
-          bank: 0,
-          singpass: 0,
-          settings: 0,
-          home: 0,
-        },
-        singpass: {
-          transaction: null,
-        },
-        metrics: baseMetrics(),
-        interactionMetrics: {
-          clicks: 0,
-          inputFocuses: 0,
-          typingStarts: 0,
-          typingLatencyTotalMs: 0,
-          typingLatencySamples: 0,
-          backPresses: 0,
-          homePresses: 0,
-          recentPresses: 0,
-          cueCount: 0,
-          timeToFirstActionMs: null,
-        },
-        learnMetrics: baseLearnMetrics(),
-        practiceMetrics: basePracticeMetrics(),
-        assessmentMetrics: baseAssessmentMetrics(),
-        checklistScores: createInitialChecklistScores(),
-        adminNotes: "",
-        cueLog: [],
-        hiddenLog: [],
-      });
+      };
+      return persistSessionState(resetEvaluationState(next, rigidAppointments));
     }
     case "MARK_COMPLETED": {
       const completedAt = Date.now();
@@ -960,7 +813,7 @@ function reducer(state, action) {
       const nextPin = createSessionPin();
       const participantRecords = state.session.participants
         .filter((participant) => participant.role === "patient")
-        .map((participant) => getParticipantScenarioRecord(state, participant.accountId, completedAt, progressRecordDeps()))
+        .map((participant) => getParticipantScenarioRecord(state, participant.accountId, completedAt, progressRecordDeps(rigidAppointments)))
         .filter(Boolean)
         .filter((record) => !state.session.records.some((saved) => (
           saved.kind === "progress"
@@ -987,8 +840,8 @@ function reducer(state, action) {
               learnMetrics: state.learnMetrics,
               practiceMetrics: state.practiceMetrics,
               assessmentMetrics: state.assessmentMetrics,
-              taskEvidence: createTaskEvidenceSnapshot(state, null, state.session.startedAt, progressRecordDeps()),
-              checklistScores: state.checklistScores,
+              taskEvidence: createTaskEvidenceSnapshot(state, null, state.session.startedAt, progressRecordDeps(rigidAppointments)),
+              checklistScoresByAccount: state.checklistScoresByAccount,
               notes: state.adminNotes,
             },
             ...state.session.records,
@@ -1060,6 +913,32 @@ function reducer(state, action) {
       };
       return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "logout_user", accountId }) });
     }
+    case "RETURN_TO_MAIN_PAGE": {
+      const accountId = state.session.currentUserId;
+      const next = {
+        ...state,
+        currentApp: "home",
+        appHistory: [],
+        tabSwitcherOpen: false,
+        workspace: {
+          ...state.workspace,
+          mode: "",
+          localSetup: null,
+        },
+        session: {
+          ...state.session,
+          joined: false,
+          joinError: "",
+          currentUserId: null,
+          participants: accountId
+            ? state.session.participants.filter((participant) => participant.accountId !== accountId)
+            : state.session.participants,
+          readStimuli: [],
+          dismissedStimuli: [],
+        },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "return_to_main_page", accountId }) });
+    }
     case "START_ASSESSMENT": {
       const next = {
         ...state,
@@ -1102,7 +981,7 @@ function reducer(state, action) {
           lastActionAt: now,
         };
       });
-      const taskResetState = resetCalendarForTaskChange(state);
+      const taskResetState = resetCalendarForTaskChange(state, rigidAppointments);
       const next = {
         ...state,
         events: taskResetState.events,
@@ -1164,7 +1043,7 @@ function reducer(state, action) {
         },
       };
       const loggedNext = { ...next, hiddenLog: appendLog(next, { kind: "assessment_complete", accountId }) };
-      const withProgress = appendParticipantProgressRecord(loggedNext, accountId, now, progressRecordDeps());
+      const withProgress = appendParticipantProgressRecord(loggedNext, accountId, now, progressRecordDeps(rigidAppointments));
       return persistSessionState(withProgress);
     }
     case "TRACK_ASSESSMENT_STUCK": {
@@ -1292,19 +1171,20 @@ function reducer(state, action) {
     case "ADD_USER_ACCOUNT": {
       const nextIndex = state.session.userAccounts.length + 1;
       const account = {
-        id: `user-${Date.now()}`,
+        id: action.id || `user-${Date.now()}`,
         alias: action.alias?.trim() || `User ${nextIndex}`,
         pin: action.pin?.trim() || createParticipantPin(),
+        participantCode: action.participantCode || action.participant_code || null,
       };
       const duplicate = state.session.userAccounts.some((item) => (
-        item.alias.toLowerCase() === account.alias.toLowerCase() || item.pin === account.pin
+        item.alias.toLowerCase() === account.alias.toLowerCase()
       ));
       if (duplicate) {
         return {
           ...state,
           session: {
             ...state.session,
-            joinError: "Alias or 4-digit PIN already exists.",
+            joinError: "Alias already exists.",
           },
         };
       }
@@ -1393,7 +1273,7 @@ function reducer(state, action) {
       } else {
         delete nextAssessmentByAccount[action.accountId];
       }
-      const taskResetState = resetCalendarForTaskChange(state);
+      const taskResetState = resetCalendarForTaskChange(state, rigidAppointments);
       const next = {
         ...taskResetState,
         ...state,
@@ -1431,7 +1311,7 @@ function reducer(state, action) {
       if (!assignmentResult) {
         return state;
       }
-      const taskResetState = resetCalendarForTaskChange(state);
+      const taskResetState = resetCalendarForTaskChange(state, rigidAppointments);
       const next = {
         ...state,
         events: taskResetState.events,
@@ -1524,7 +1404,7 @@ function reducer(state, action) {
         },
       };
       const loggedNext = { ...next, hiddenLog: appendLog(next, { kind: "learn_module_complete", accountId, app }) };
-      const withProgress = accountId ? appendParticipantProgressRecord(loggedNext, accountId, now, progressRecordDeps()) : loggedNext;
+      const withProgress = accountId ? appendParticipantProgressRecord(loggedNext, accountId, now, progressRecordDeps(rigidAppointments)) : loggedNext;
       return persistSessionState(withProgress);
     }
     case "SET_PRACTICE_SUPPORT": {
@@ -1576,7 +1456,7 @@ function reducer(state, action) {
         },
       };
       const loggedNext = { ...next, hiddenLog: appendLog(next, { kind: "practice_step", accountId, stepId: action.stepId }) };
-      const withProgress = action.isComplete ? appendParticipantProgressRecord(loggedNext, accountId, nextAccountMetrics.completedAt, progressRecordDeps()) : loggedNext;
+      const withProgress = action.isComplete ? appendParticipantProgressRecord(loggedNext, accountId, nextAccountMetrics.completedAt, progressRecordDeps(rigidAppointments)) : loggedNext;
       return persistSessionState(withProgress);
     }
     case "TRACK_PRACTICE_PROMPT": {
@@ -1602,7 +1482,6 @@ function reducer(state, action) {
             ...practiceMetrics.byAccount,
             [accountId]: {
               ...current,
-              supportMode: "prompt",
               promptCount: current.promptCount + 1,
               highestPromptLevel: Math.max(current.highestPromptLevel, level),
               promptHistory: [prompt, ...(current.promptHistory || [])].slice(0, 20),
@@ -1731,6 +1610,7 @@ function reducer(state, action) {
         appHistory: localTargeted ? ["home"] : state.appHistory,
         session: {
           ...clearEndedSessionForPush(state.session),
+          controlRevision: Math.max(0, Number(state.session.controlRevision) || 0) + 1,
           mode: "free",
           userModes,
           participants,
@@ -1752,6 +1632,7 @@ function reducer(state, action) {
         ...state,
         session: {
           ...state.session,
+          controlRevision: Math.max(0, Number(state.session.controlRevision) || 0) + 1,
           customStimuli: (state.session.customStimuli || []).filter((item) => item.id !== action.stimulusId),
           readStimuli: (state.session.readStimuli || []).filter((id) => id !== action.stimulusId),
           dismissedStimuli: (state.session.dismissedStimuli || []).filter((id) => id !== action.stimulusId),
@@ -1787,7 +1668,7 @@ function reducer(state, action) {
           startedAt: now,
         };
       });
-      const taskResetState = resetCalendarForTaskChange(state);
+      const taskResetState = resetCalendarForTaskChange(state, rigidAppointments);
       const next = {
         ...state,
         events: taskResetState.events,
@@ -1817,14 +1698,19 @@ function reducer(state, action) {
         },
       };
     case "SCORE_CHECKLIST_ITEM": {
+      const accountId = action.accountId || state.session.currentUserId;
+      if (!accountId) return state;
       const next = {
         ...state,
-        checklistScores: {
-          ...state.checklistScores,
-          [action.itemId]: action.score,
+        checklistScoresByAccount: {
+          ...state.checklistScoresByAccount,
+          [accountId]: {
+            ...getChecklistScoresForAccount(state, accountId),
+            [action.itemId]: action.score,
+          },
         },
       };
-      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "score_checklist", itemId: action.itemId, score: action.score }) });
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "score_checklist", accountId, itemId: action.itemId, score: action.score }) });
     }
     case "UPDATE_ADMIN_NOTES":
       return persistSessionState({
@@ -1947,43 +1833,19 @@ const VirtualOSContext = createContext(null);
 export function VirtualOSProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
+  const immediateCloudSyncRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useVirtualOSCloudSync({ state, stateRef, dispatch, immediateCloudSyncRef });
 
   useEffect(() => {
     const timer = setInterval(() => {
       dispatch({ type: "TICK", delta: CLOCK_SPEED });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    function onStorage(event) {
-      if (event.key !== liveStateStorageKey() || !event.newValue) {
-        return;
-      }
-      try {
-        const snapshot = JSON.parse(event.newValue);
-        if (snapshot?.session) {
-          dispatch({ type: "HYDRATE_LIVE_STATE", snapshot });
-        }
-      } catch {
-        // Ignore malformed sync payloads.
-      }
-    }
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      syncCloudState(stateRef.current);
-    }, getCloudSyncIntervalMs());
-    syncCloudState(stateRef.current);
-    return () => window.clearInterval(timer);
   }, []);
 
   const api = useMemo(() => {
@@ -2007,19 +1869,45 @@ export function VirtualOSProvider({ children }) {
       submitExperienceRating: (rating, accountId) => dispatch({ type: "SUBMIT_EXPERIENCE_RATING", rating, accountId }),
       startAssessment: () => dispatch({ type: "START_ASSESSMENT" }),
       createSession: () => dispatch({ type: "CREATE_SESSION" }),
-      joinSession: (pin, participantPin) => dispatch({ type: "JOIN_SESSION", pin, participantPin }),
+      startLocalMode: (options = {}) => dispatch({ type: "START_LOCAL_MODE", ...options }),
+      joinSession: async (pin, participantPin, selectedAlias = "", authenticatedAccount = null) => {
+        const alias = String(selectedAlias || "").trim();
+        const result = await prepareCloudJoin(pin, alias, participantPin, stateRef.current, authenticatedAccount);
+        if (result.ok) {
+          dispatch({ type: "HYDRATE_LIVE_STATE", snapshot: result.snapshot });
+        } else if (result.error) {
+          dispatch({ type: "SET_JOIN_ERROR", error: result.error });
+          return false;
+        }
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "JOIN_SESSION", pin, participantPin, alias, account: result.account });
+        return true;
+      },
       logoutUser: () => dispatch({ type: "LOGOUT_USER" }),
+      returnToMainPage: () => dispatch({ type: "RETURN_TO_MAIN_PAGE" }),
       setPendingUserIdentity: (alias, participantPin) => dispatch({ type: "SET_PENDING_USER_IDENTITY", alias, participantPin }),
       markStimulusRead: (stimulusId) => dispatch({ type: "MARK_STIMULUS_READ", stimulusId }),
       dismissStimulus: (stimulusId) => dispatch({ type: "DISMISS_STIMULUS", stimulusId }),
       setSessionMode: (mode) => dispatch({ type: "SET_SESSION_MODE", mode }),
       setWorkspaceView: (view) => dispatch({ type: "SET_WORKSPACE_VIEW", view }),
-      scoreChecklistItem: (itemId, score) => dispatch({ type: "SCORE_CHECKLIST_ITEM", itemId, score }),
+      scoreChecklistItem: (itemId, score, accountId) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "SCORE_CHECKLIST_ITEM", itemId, score, accountId });
+      },
       updateAdminNotes: (notes) => dispatch({ type: "UPDATE_ADMIN_NOTES", notes }),
       addUserAccount: (account) => dispatch({ type: "ADD_USER_ACCOUNT", ...account }),
-      removeUserAccount: (accountId) => dispatch({ type: "REMOVE_USER_ACCOUNT", accountId }),
-      setUserMode: (accountId, mode) => dispatch({ type: "SET_USER_MODE", accountId, mode }),
-      setLearnModule: (accountId, app) => dispatch({ type: "SET_LEARN_MODULE", accountId, app }),
+      removeUserAccount: (accountId) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "REMOVE_USER_ACCOUNT", accountId });
+      },
+      setUserMode: (accountId, mode) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "SET_USER_MODE", accountId, mode });
+      },
+      setLearnModule: (accountId, app) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "SET_LEARN_MODULE", accountId, app });
+      },
       trackLearnAttempt: (app, correct, attemptType, accountId) => dispatch({ type: "TRACK_LEARN_ATTEMPT", app, correct, attemptType, accountId }),
       completeLearnModule: (app, accountId) => dispatch({ type: "COMPLETE_LEARN_MODULE", app, accountId }),
       setPracticeSupport: (supportMode, options = {}) => dispatch({ type: "SET_PRACTICE_SUPPORT", supportMode, ...options }),
@@ -2028,14 +1916,26 @@ export function VirtualOSProvider({ children }) {
       trackPracticeWrongStep: () => dispatch({ type: "TRACK_PRACTICE_WRONG_STEP" }),
       trackPracticeAnswer: (stepId, correct, answerCheckId = "") => dispatch({ type: "TRACK_PRACTICE_ANSWER", stepId, correct, answerCheckId }),
       addCustomScenario: (scenario) => dispatch({ type: "ADD_CUSTOM_SCENARIO", scenario }),
-      pushCustomStimulus: (stimulus) => dispatch({ type: "PUSH_CUSTOM_STIMULUS", ...stimulus }),
+      pushCustomStimulus: (stimulus) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "PUSH_CUSTOM_STIMULUS", ...stimulus });
+      },
       removeCustomStimulus: (stimulusId) => dispatch({ type: "REMOVE_CUSTOM_STIMULUS", stimulusId }),
-      pushScenario: (scenarioId, targetId) => dispatch({ type: "PUSH_SCENARIO", scenarioId, targetId }),
-      pushAssessment: (scenarioId, targetId) => dispatch({ type: "PUSH_ASSESSMENT", scenarioId, targetId }),
+      pushScenario: (scenarioId, targetId) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "PUSH_SCENARIO", scenarioId, targetId });
+      },
+      pushAssessment: (scenarioId, targetId) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "PUSH_ASSESSMENT", scenarioId, targetId });
+      },
       completeAssessment: (accountId, completedAt) => dispatch({ type: "COMPLETE_ASSESSMENT", accountId, completedAt }),
       startAssessmentAssignment: (accountId) => dispatch({ type: "START_ASSESSMENT_ASSIGNMENT", accountId }),
       trackAssessmentStuck: (accountId, idleMs, app) => dispatch({ type: "TRACK_ASSESSMENT_STUCK", accountId, idleMs, app }),
-      pushAssessmentPrompt: (accountId, prompt) => dispatch({ type: "PUSH_ASSESSMENT_PROMPT", accountId, ...prompt }),
+      pushAssessmentPrompt: (accountId, prompt) => {
+        immediateCloudSyncRef.current = true;
+        dispatch({ type: "PUSH_ASSESSMENT_PROMPT", accountId, ...prompt });
+      },
       trackAssessmentAnswer: (accountId, checkId, correct) => dispatch({ type: "TRACK_ASSESSMENT_ANSWER", accountId, checkId, correct }),
       trackAssessmentStep: (accountId, stepId) => dispatch({ type: "TRACK_ASSESSMENT_STEP", accountId, stepId }),
       requestSingpassTransaction: (transaction) => dispatch({ type: "REQUEST_SINGPASS_TRANSACTION", ...transaction }),
@@ -2057,5 +1957,3 @@ export function useVirtualOS() {
   }
   return ctx;
 }
-
-

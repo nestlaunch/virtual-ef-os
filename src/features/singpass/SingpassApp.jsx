@@ -5,14 +5,14 @@ const DUMMY_NRIC = "S1234567A";
 const PROFILE_NAME = "AMIR BIN HASSAN";
 
 const SERVICES = [
-  { id: "cpf", label: "CPF Website", abbr: "CPF", color: "#1A5C2A", bg: "#0D3018" },
-  { id: "ica", label: "MyICA", abbr: "ICA", color: "#8B1A1A", bg: "#3A0A0A" },
-  { id: "healthhub", label: "HealthHub", abbr: "HH", color: "#1A4A8B", bg: "#0A1E3A" },
-  { id: "onemotoring", label: "OneMotoring", abbr: "1M", color: "#8B5E1A", bg: "#3A2A0A" },
-  { id: "hdb", label: "HDB", abbr: "HDB", color: "#6B1A8B", bg: "#2A0A3A" },
-  { id: "lifesg", label: "LifeSG", abbr: "LSG", color: "#1A6B8B", bg: "#0A2A3A" },
-  { id: "iras", label: "IRAS", abbr: "IRAS", color: "#1A8B6B", bg: "#0A3A2A" },
-  { id: "skills", label: "SkillsFuture", abbr: "SF", color: "#64a8ff", bg: "#112d52" },
+  { id: "cpf", label: "CPF e-Services", abbr: "CPF", color: "#ffffff", bg: "#0b6938" },
+  { id: "ica", label: "MyICA", abbr: "ICA", color: "#ffffff", bg: "#d12b2b" },
+  { id: "healthhub", label: "HealthHub", abbr: "HH", color: "#ffffff", bg: "#1677c7" },
+  { id: "onemotoring", label: "OneMotoring", abbr: "1M", color: "#ffffff", bg: "#f28c28" },
+  { id: "hdb", label: "HDB Flat Portal", abbr: "HDB", color: "#ffffff", bg: "#7f4ac8" },
+  { id: "lifesg", label: "LifeSG", abbr: "LSG", color: "#ffffff", bg: "#00a0a8" },
+  { id: "iras", label: "myTax Portal", abbr: "IRAS", color: "#ffffff", bg: "#245aa6" },
+  { id: "skills", label: "SkillsFuture", abbr: "SF", color: "#ffffff", bg: "#e05c52" },
 ];
 
 const PROFILE_CATEGORIES = [
@@ -288,14 +288,18 @@ function HomeTab({
   return (
     <main className="singpass-scroll singpass-home">
       <SingpassStatusBar />
+      <header className="singpass-brand-row">
+        <span />
+        <strong>Singpass</strong>
+        <button type="button" className="singpass-round-btn" onClick={onSettings} aria-label="Settings">
+          <span>...</span>
+        </button>
+      </header>
       <section className="singpass-welcome">
         <div>
           <p>Welcome back,</p>
           <h1>{PROFILE_NAME}</h1>
         </div>
-        <button type="button" className="singpass-round-btn" onClick={onSettings} aria-label="Settings">
-          <span>...</span>
-        </button>
       </section>
 
       {transaction?.status === "pending" ? (
@@ -359,10 +363,8 @@ function HomeTab({
 
       <section className="singpass-favourites singpass-section-block">
         <div className="singpass-section-title">
-          <strong>Favourites</strong>
-          <button type="button">Edit Favourites</button>
+          <strong>Last used shortcuts</strong>
         </div>
-        <p>Customise your favourite shortcuts. We show the most popular shortcuts by default.</p>
         <div className="singpass-service-grid">
           {SERVICES.map((service) => (
             <button type="button" key={service.id} onClick={() => onService(service.id)}>
@@ -464,25 +466,27 @@ function NricCard() {
   return (
     <article className="singpass-identity-card nric">
       <div className="sg-header">
+        <span className="sg-crest" aria-hidden="true">SG</span>
         <div>
-          <strong>Digital practice environment</strong>
-          <span>Identity card (simulation only)</span>
+          <strong>Republic of Singapore</strong>
+          <span>National Digital Identity Card</span>
         </div>
-        <SgFlag />
       </div>
       <div className="id-body">
-        <div className="photo-placeholder">AH</div>
+        <div className="photo-placeholder">
+          <span>AH</span>
+        </div>
         <div>
           <h2>{PROFILE_NAME}</h2>
           <dl>
-            <div><dt>Race</dt><dd>Malay</dd></div>
+            <div><dt>NRIC</dt><dd>S******7A</dd></div>
             <div><dt>Date of birth</dt><dd>12 Jun 1989</dd></div>
             <div><dt>Sex</dt><dd>Male</dd></div>
-            <div><dt>NRIC</dt><dd>S******7A</dd></div>
+            <div><dt>Race</dt><dd>Malay</dd></div>
           </dl>
         </div>
       </div>
-      <footer>Simulation - not valid for official use</footer>
+      <footer>Digital IC for practice only</footer>
     </article>
   );
 }
@@ -637,13 +641,5 @@ function DetailRow({ label, value }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
-  );
-}
-
-function SgFlag() {
-  return (
-    <span className="sg-flag" aria-hidden="true">
-      <span />
-    </span>
   );
 }

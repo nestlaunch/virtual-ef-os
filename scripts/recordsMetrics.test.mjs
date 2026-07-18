@@ -20,6 +20,8 @@ import {
 } from "../src/features/admin/recordsMetrics.js";
 import { filterEvidenceActions, filterEvidenceEvents, summarizeInteractions } from "../src/state/sessionMetrics.js";
 import { appendParticipantProgressRecord, createTaskEvidenceSnapshot } from "../src/state/progressRecords.js";
+import { applyAdminControlledSessionFields, getRecordPayload } from "../src/state/cloudSync.js";
+import { getChecklistScoresForAccount } from "../src/state/v2Assessment.js";
 import { baseLearnMetrics, getLearnAccountMetrics, updateLearnAccuracy } from "../src/state/learnMetrics.js";
 import {
   applyLearnModuleAssignment,
@@ -52,6 +54,7 @@ import { buildPracticeGuide, flattenGuideSteps, getActivePracticePage, practiceP
 import { getLatestUnreadStimulus, getVisibleThreadIdsForState } from "../src/state/stimulusSequence.js";
 import { clearAllWhatsAppStorage, clearWhatsAppStorage, getWhatsAppStorageKey, LEGACY_WHATSAPP_STORAGE_KEY, WHATSAPP_STORAGE_PREFIX } from "../src/features/whatsapp/whatsappSession.js";
 import { getLocalDeviceSnapshot, getSharedSessionSnapshot, getStoredLiveStateSnapshot, mergeLiveStateSnapshot } from "../src/state/sessionStore.js";
+import { applyCloudControlledSessionFields } from "../src/state/cloudSync.js";
 import { APP_CATALOG, CHECKLIST_ITEMS, SCENARIO_LIBRARY } from "../src/state/v2Assessment.js";
 import { getAssessmentAnswerChecksForCriteria, TASK_ANSWER_CHECKS } from "../src/features/taskAnswerChecks.js";
 import { canSubmitAssessmentTask } from "../src/features/assessment/assessmentTaskState.js";
@@ -605,7 +608,11 @@ const localSession = {
 };
 const sharedSession = {
   pin: "NEWPIN",
+  controlRevision: 0,
+  mode: "practice",
+  participantLimit: 6,
   joined: false,
+  joinError: "",
   deviceId: "device-admin",
   currentUserId: "admin",
   pendingAlias: "",
@@ -613,6 +620,16 @@ const sharedSession = {
   readStimuli: [],
   dismissedStimuli: [],
   participants: [],
+  userAccounts: [],
+  removedAccountIds: [],
+  assignments: {},
+  userModes: {},
+  learnModules: {},
+  customScenarios: [],
+  customStimuli: [],
+  records: [],
+  events: [],
+  experienceRatings: {},
 };
 assert.deepEqual(preserveLocalSessionIdentity(localSession, sharedSession), {
   ...sharedSession,
@@ -658,6 +675,9 @@ assert.deepEqual(getSharedSessionSnapshot({
   records: [{ id: "record-1" }],
 }), {
   ...localSession,
+  controlRevision: 0,
+  mode: "practice",
+  participantLimit: 6,
   joined: false,
   joinError: "",
   deviceId: null,
@@ -668,8 +688,99 @@ assert.deepEqual(getSharedSessionSnapshot({
   dismissedStimuli: [],
   participants: [{ accountId: "user-a" }],
   userAccounts: [{ id: "user-a" }],
+  removedAccountIds: [],
+  assignments: {},
+  userModes: {},
+  learnModules: {},
+  customScenarios: [],
+  customStimuli: [],
   records: [{ id: "record-1" }],
+  events: [],
+  experienceRatings: {},
 });
+assert.equal(getSharedSessionSnapshot({ userAccounts: [{ id: "user-a", alias: "Calm Panda", pin: "1234" }] }).userAccounts[0].pin, undefined);
+assert.deepEqual(preserveLocalSessionIdentity(localSession, {
+  pin: "PARTLY",
+  participants: [{ accountId: "user-a" }],
+}).userModes, {});
+assert.deepEqual(mergeLiveStateSnapshot({
+  session: {
+    pin: "PARTLY",
+    participants: [{ accountId: "user-a" }],
+  },
+  events: [],
+}, null).session.learnModules, {});
+const patientPublishSnapshot = applyCloudControlledSessionFields({
+  session: {
+    pin: "PUSHED",
+    mode: "practice",
+    currentUserId: "user-a",
+    participants: [{ accountId: "user-a", role: "patient", mode: "practice", currentApp: "calendar", activeScenarioId: "" }],
+    userModes: { "user-a": "practice" },
+    assignments: {},
+    learnModules: {},
+    customStimuli: [],
+  },
+}, {
+  session: {
+    pin: "PUSHED",
+    mode: "learn",
+    participants: [{ accountId: "user-a", role: "patient", mode: "learn", currentApp: "home", activeScenarioId: "learn-calendar" }],
+    userModes: { "user-a": "learn" },
+    assignments: { "user-a": [{ id: "learn-now", mode: "learn", scenarioId: "learn-calendar" }] },
+    learnModules: { "user-a": "calendar" },
+    customStimuli: [{ id: "custom-one" }],
+  },
+}, "user-a");
+assert.equal(patientPublishSnapshot.session.participants[0].currentApp, "calendar");
+assert.equal(patientPublishSnapshot.session.participants[0].mode, "learn");
+assert.deepEqual(patientPublishSnapshot.session.userModes, { "user-a": "learn" });
+assert.deepEqual(patientPublishSnapshot.session.learnModules, { "user-a": "calendar" });
+assert.equal(patientPublishSnapshot.session.assignments["user-a"][0].id, "learn-now");
+assert.equal(patientPublishSnapshot.session.customStimuli[0].id, "custom-one");
+const clearedPatientAssignment = applyCloudControlledSessionFields({
+  session: {
+    pin: "CLEARED",
+    participants: [{ accountId: "user-a", mode: "learn", activeScenarioId: "learn-calendar" }],
+  },
+}, {
+  session: {
+    pin: "CLEARED",
+    mode: "free",
+    participants: [{ accountId: "user-a", mode: "free", activeScenarioId: "", currentApp: "home" }],
+    assignments: {},
+    userModes: { "user-a": "free" },
+    learnModules: {},
+  },
+}, "user-a");
+assert.equal(clearedPatientAssignment.session.participants[0].activeScenarioId, "");
+const adminControlledSnapshot = applyAdminControlledSessionFields({
+  session: {
+    pin: "PUSHED",
+    mode: "learn",
+    controlRevision: 2,
+    assignments: { "user-a": [{ id: "old-learn" }] },
+    userModes: { "user-a": "learn" },
+    learnModules: { "user-a": "calendar" },
+    customStimuli: [{ id: "old-message" }],
+    customScenarios: [],
+  },
+}, {
+  session: {
+    mode: "free",
+    controlRevision: 3,
+    assignments: {},
+    userModes: { "user-a": "free" },
+    learnModules: {},
+    customStimuli: [],
+    customScenarios: [],
+  },
+});
+assert.equal(adminControlledSnapshot.session.mode, "free");
+assert.equal(adminControlledSnapshot.session.controlRevision, 3);
+assert.deepEqual(adminControlledSnapshot.session.assignments, {});
+assert.deepEqual(adminControlledSnapshot.session.learnModules, {});
+assert.deepEqual(adminControlledSnapshot.session.customStimuli, []);
 const currentLiveSnapshot = getStoredLiveStateSnapshot({
   session: {
     pin: "MERGEA",
@@ -964,6 +1075,7 @@ assert.deepEqual(resetSessionForNewPin({
   customScenarios: [{ id: "custom-1" }],
 }, { pin: "NEWPIN", deviceId: "device-a", startedAt: 7000 }), {
   pin: "NEWPIN",
+  controlRevision: 0,
   joined: false,
   joinError: "",
   deviceId: "device-a",
@@ -1041,6 +1153,7 @@ assert.equal(assignmentResult.session.learnModules["user-b"], "bank");
 assert.equal(assignmentResult.session.participants[0].currentApp, "home");
 assert.equal(assignmentResult.session.participants[1].currentApp, "bank");
 assert.equal(assignmentResult.session.assignments["user-a"][0].id, "assign-next");
+assert.equal(assignmentResult.session.controlRevision, 1);
 const allAssignmentResult = applyScenarioAssignment({
   currentUserId: "user-a",
   completedAt: 1,
@@ -1099,6 +1212,7 @@ assert.equal(learnAssignmentResult.session.assignments["user-a"].at(-1).id, "new
 assert.equal(learnAssignmentResult.session.learnModules["user-a"], "calendar");
 assert.equal(learnAssignmentResult.session.participants[0].activeScenarioId, "learn-calendar");
 assert.equal(learnAssignmentResult.session.participants[1].currentApp, "home");
+assert.equal(learnAssignmentResult.session.controlRevision, 1);
 const isolatedLearnAssignmentResult = applyLearnModuleAssignment({
   currentUserId: "user-a",
   assignments: { "user-a": [{ id: "old-a" }], "user-b": [{ id: "old-b" }] },
@@ -1157,6 +1271,7 @@ assert.equal(modeSelectionResult.session.learnModules["user-b"], "sms");
 assert.equal(modeSelectionResult.session.participants[0].activeScenarioId, "");
 assert.equal(modeSelectionResult.session.participants[0].currentApp, "home");
 assert.equal(modeSelectionResult.session.participants[1].activeScenarioId, "learn-sms");
+assert.equal(modeSelectionResult.session.controlRevision, 1);
 assert.equal(applyModeSelection({ participants: [] }, { accountId: "missing", mode: "free", now: 1 }), null);
 assert.equal(getStimulusStartAt({ startedAt: 1000, assignments: { "user-a": [{ pushedAt: 4000 }] } }, "user-a"), 4000);
 assert.equal(getStimulusStartAt({ startedAt: 1000, assignments: {} }, "user-a"), 1000);
@@ -1334,6 +1449,8 @@ assert.equal(isCorrectLearnAnswer("Clinic C", TASK_ANSWER_CHECKS.clinicLocation.
 assert.equal(isCorrectLearnAnswer("Hougang Polyclinic, S$250.00", TASK_ANSWER_CHECKS.paymentDetails.answers), false);
 const practiceGuideSource = readFileSync(new URL("../src/features/practice/practiceGuides.js", import.meta.url), "utf8");
 const mapsAppSource = readFileSync(new URL("../src/features/maps/MapsApp.jsx", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../src/app/App.jsx", import.meta.url), "utf8");
+const assessmentOverlaySource = readFileSync(new URL("../src/features/assessment/AssessmentOverlays.jsx", import.meta.url), "utf8");
 SCENARIO_LIBRARY
   .filter((scenario) => scenario.id.startsWith("single-"))
   .forEach((scenario) => {
@@ -1347,5 +1464,24 @@ assert.equal(practiceGuideSource.includes('event.target.value.trim().toLowerCase
 assert.equal(practiceGuideSource.includes('event.target.value.trim().toLowerCase() === "psychiatry appointment"'), true);
 assert.equal(mapsAppSource.includes('id: "home", name: "Home"'), true);
 assert.equal(mapsAppSource.includes('"home|hougang-polyclinic": { transit: 14'), true);
+assert.equal(appSource.includes('onClick={onOnlineMode}'), true);
+assert.equal(appSource.includes('<JoinSession />'), true);
+assert.equal(assessmentOverlaySource.includes('className="assessment-offline-results"'), true);
+assert.equal(assessmentOverlaySource.includes('state.workspace?.mode === "local"'), true);
+
+const separatedScores = {
+  checklistScoresByAccount: {
+    "patient-a": { sequences_steps: 4 },
+    "patient-b": { sequences_steps: 1 },
+  },
+};
+assert.equal(getChecklistScoresForAccount(separatedScores, "patient-a").sequences_steps, 4);
+assert.equal(getChecklistScoresForAccount(separatedScores, "patient-b").sequences_steps, 1);
+const checklistPayload = getRecordPayload(
+  { id: "record-1", mode: "assessment" },
+  { accountId: "patient-a", checklistScores: { sequences_steps: 4 } },
+  "session-1",
+);
+assert.deepEqual(checklistPayload.functional.checklist, { sequences_steps: 4 });
 
 console.log("recordsMetrics regression tests passed");

@@ -4,12 +4,12 @@ compatibility_date = "2026-06-01"
 
 [assets]
 directory = "./dist"
-binding = "ASSETS"
+binding = "SITE_ASSETS"
 not_found_handling = "single-page-application"
 
 [vars]
 # Comma-separated production origins. Leave empty while testing same-origin deploys.
-ALLOWED_ORIGINS = ""
+ALLOWED_ORIGINS = "https://dailydigital.pages.dev"
 
 [[d1_databases]]
 binding = "DB"
@@ -21,6 +21,7 @@ migrations_dir = "migrations"
 [[durable_objects.bindings]]
 name = "SESSION_DO"
 class_name = "SessionCoordinator"
+script_name = "daily-digital"
 
 [[migrations]]
 tag = "v1"

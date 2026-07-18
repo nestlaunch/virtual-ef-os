@@ -6,4 +6,5 @@ dist/
 dev-server*.log
 dev-server*.err
 vite-dev*.log
+backups/
 Reference/

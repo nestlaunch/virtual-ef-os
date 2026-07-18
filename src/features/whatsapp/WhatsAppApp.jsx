@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { whatsappThreads } from "../../state/seedData";
 import { useVirtualOS } from "../../state/VirtualOSContext";
-import { analyzeWhatsAppTurn } from "../../services/geminiClient";
+import { analyzeWhatsAppTurn } from "../../services/aiReplyClient";
 import { findStimulusForState, getCustomStimuliForApp, getVisibleThreadIdsForState } from "../../state/stimulusSequence";
 import { getCurrentAssignment } from "../../state/sessionLifecycle";
 import { clearWhatsAppStorage, getWhatsAppStorageKey } from "./whatsappSession";
@@ -364,6 +364,9 @@ export function WhatsAppApp() {
     let turn = null;
     try {
       turn = await analyzeWhatsAppTurn({
+        sessionPin: state.session.pin,
+        accountId: state.session.currentUserId,
+        threadId,
         threadName: activeThreadSnapshot.sender,
         userMessage: content,
         history: historyWithUser,
@@ -387,11 +390,11 @@ export function WhatsAppApp() {
     }
 
     const lastIncoming = [...historyWithUser].reverse().find((m) => !m.mine)?.text;
-    const geminiReply = String(turn?.reply || "").trim();
-    const shouldAvoidGeminiReply = !geminiReply || normText(geminiReply) === normText(lastIncoming);
-    const resolvedReply = shouldAvoidGeminiReply
+    const aiReply = String(turn?.reply || "").trim();
+    const shouldAvoidAiReply = !aiReply || normText(aiReply) === normText(lastIncoming);
+    const resolvedReply = shouldAvoidAiReply
       ? buildFallbackReply(threadId, content, historyWithUser)
-      : geminiReply;
+      : aiReply;
 
     const timer = setTimeout(() => {
       appendIncomingMessage(threadId, activeThreadSnapshot.sender, resolvedReply);

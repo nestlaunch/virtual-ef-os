@@ -144,7 +144,7 @@ export const TASK_ANSWER_CHECKS = {
       label: "Hougang Polyclinic, S$250.00",
       correct: false,
     }, {
-      label: "DBS Bank, S$25.00",
+      label: "Sunrise Bank, S$25.00",
       correct: false,
     }],
   },

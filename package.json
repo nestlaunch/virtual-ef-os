@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node scripts/recordsMetrics.test.mjs",
+    "test": "node scripts/recordsMetrics.test.mjs && node scripts/cloudApi.test.mjs",
     "preview": "vite preview",
     "worker:dev": "npm run build && npx wrangler dev",
     "d1:migrate": "npx wrangler d1 migrations apply daily-digital-db --remote",
+    "deploy:pages": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-pages.ps1",
     "deploy:worker": "npm run build && npx wrangler deploy"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "wrangler": "^4.110.0"
   }
 }

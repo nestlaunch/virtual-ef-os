@@ -1,10 +1,18 @@
+import { normalizeSessionShape } from "./sessionStore.js";
+
+function nextControlRevision(session) {
+  return Math.max(0, Number(session?.controlRevision) || 0) + 1;
+}
+
 export function preserveLocalSessionIdentity(localSession, sharedSession) {
-  const currentUserId = localSession.currentUserId;
+  const safeLocalSession = normalizeSessionShape(localSession);
+  const safeSharedSession = normalizeSessionShape(sharedSession);
+  const currentUserId = safeLocalSession.currentUserId;
   const localParticipant = currentUserId
-    ? (localSession.participants || []).find((participant) => participant.accountId === currentUserId)
+    ? safeLocalSession.participants.find((participant) => participant.accountId === currentUserId)
     : null;
   const sharedParticipant = currentUserId
-    ? (sharedSession.participants || []).find((participant) => participant.accountId === currentUserId)
+    ? safeSharedSession.participants.find((participant) => participant.accountId === currentUserId)
     : null;
   const assignmentChanged = Boolean(sharedParticipant) && (
     sharedParticipant.activeScenarioId !== localParticipant?.activeScenarioId
@@ -12,14 +20,14 @@ export function preserveLocalSessionIdentity(localSession, sharedSession) {
   );
   const localUserStillJoined = !currentUserId || Boolean(sharedParticipant);
   return {
-    ...sharedSession,
-    joined: localUserStillJoined ? localSession.joined : false,
-    deviceId: localSession.deviceId,
+    ...safeSharedSession,
+    joined: localUserStillJoined ? safeLocalSession.joined : false,
+    deviceId: safeLocalSession.deviceId,
     currentUserId: localUserStillJoined ? currentUserId : null,
-    pendingAlias: localSession.pendingAlias,
-    pendingUserPin: localSession.pendingUserPin,
-    readStimuli: localUserStillJoined && !assignmentChanged ? localSession.readStimuli : [],
-    dismissedStimuli: localUserStillJoined && !assignmentChanged ? localSession.dismissedStimuli : [],
+    pendingAlias: safeLocalSession.pendingAlias,
+    pendingUserPin: safeLocalSession.pendingUserPin,
+    readStimuli: localUserStillJoined && !assignmentChanged ? safeLocalSession.readStimuli : [],
+    dismissedStimuli: localUserStillJoined && !assignmentChanged ? safeLocalSession.dismissedStimuli : [],
   };
 }
 
@@ -107,6 +115,7 @@ export function resetSessionForNewPin(session, options) {
   } = options;
   return {
     ...session,
+    controlRevision: 0,
     pin,
     joined: false,
     joinError: "",
@@ -202,6 +211,7 @@ export function applyScenarioAssignment(session, options) {
   return {
     session: {
       ...clearEndedSessionForPush(session),
+      controlRevision: nextControlRevision(session),
       mode,
       readStimuli: localTargeted ? [] : session.readStimuli,
       dismissedStimuli: localTargeted ? [] : session.dismissedStimuli,
@@ -251,6 +261,7 @@ export function applyLearnModuleAssignment(session, options) {
   return {
     session: {
       ...clearEndedSessionForPush(session),
+      controlRevision: nextControlRevision(session),
       mode: "learn",
       userModes: {
         ...(session.userModes || {}),
@@ -308,6 +319,7 @@ export function applyModeSelection(session, options) {
   return {
     session: {
       ...clearEndedSessionForPush(session),
+      controlRevision: nextControlRevision(session),
       mode,
       readStimuli: localTargeted ? [] : session.readStimuli,
       dismissedStimuli: localTargeted ? [] : session.dismissedStimuli,

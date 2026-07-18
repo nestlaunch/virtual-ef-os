@@ -1,6 +1,6 @@
-const SESSION_KEY = "virtual-ef-session-v2";
-const LIVE_STATE_KEY = "virtual-ef-live-state-v2";
-const LOCAL_DEVICE_KEY = "virtual-ef-local-device-v2";
+const SESSION_KEY = "virtual-ef-session-v3";
+const LIVE_STATE_KEY = "virtual-ef-live-state-v3";
+const LOCAL_DEVICE_KEY = "virtual-ef-local-device-v3";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 export function createSessionPin() {
@@ -79,20 +79,51 @@ export function loadLocalDeviceState() {
 }
 
 export function getLocalDeviceSnapshot(session) {
+  const safeSession = normalizeSessionShape(session);
   return {
-    deviceId: session.deviceId,
-    joined: session.joined,
-    currentUserId: session.currentUserId,
-    pendingAlias: session.pendingAlias,
-    pendingUserPin: session.pendingUserPin,
-    readStimuli: session.readStimuli,
-    dismissedStimuli: session.dismissedStimuli,
+    deviceId: safeSession.deviceId,
+    joined: safeSession.joined,
+    currentUserId: safeSession.currentUserId,
+    pendingAlias: safeSession.pendingAlias,
+    pendingUserPin: safeSession.pendingUserPin,
+    readStimuli: safeSession.readStimuli,
+    dismissedStimuli: safeSession.dismissedStimuli,
+  };
+}
+
+export function normalizeSessionShape(session = {}) {
+  return {
+    ...session,
+    controlRevision: Math.max(0, Number(session.controlRevision) || 0),
+    mode: session.mode || "practice",
+    participantLimit: session.participantLimit || 6,
+    joined: Boolean(session.joined),
+    joinError: session.joinError || "",
+    deviceId: session.deviceId || null,
+    currentUserId: session.currentUserId || null,
+    pendingAlias: session.pendingAlias || "",
+    pendingUserPin: session.pendingUserPin || "",
+    participants: Array.isArray(session.participants) ? session.participants : [],
+    userAccounts: Array.isArray(session.userAccounts) ? session.userAccounts : [],
+    removedAccountIds: Array.isArray(session.removedAccountIds) ? session.removedAccountIds : [],
+    assignments: session.assignments && typeof session.assignments === "object" ? session.assignments : {},
+    userModes: session.userModes && typeof session.userModes === "object" ? session.userModes : {},
+    learnModules: session.learnModules && typeof session.learnModules === "object" ? session.learnModules : {},
+    customScenarios: Array.isArray(session.customScenarios) ? session.customScenarios : [],
+    customStimuli: Array.isArray(session.customStimuli) ? session.customStimuli : [],
+    records: Array.isArray(session.records) ? session.records : [],
+    events: Array.isArray(session.events) ? session.events : [],
+    experienceRatings: session.experienceRatings && typeof session.experienceRatings === "object" ? session.experienceRatings : {},
+    readStimuli: Array.isArray(session.readStimuli) ? session.readStimuli : [],
+    dismissedStimuli: Array.isArray(session.dismissedStimuli) ? session.dismissedStimuli : [],
   };
 }
 
 export function getSharedSessionSnapshot(session) {
+  const safeSession = normalizeSessionShape(session);
   return {
-    ...session,
+    ...safeSession,
+    userAccounts: safeSession.userAccounts.map(({ pin, authToken, ...account }) => account),
     joined: false,
     joinError: "",
     deviceId: null,
@@ -242,36 +273,45 @@ function filterRemovedRecords(records = [], removedAccountIds = new Set()) {
 }
 
 export function mergeLiveStateSnapshot(currentSnapshot, previousSnapshot) {
-  if (!previousSnapshot?.session || previousSnapshot.session.pin !== currentSnapshot?.session?.pin) {
+  if (!currentSnapshot?.session) {
     return currentSnapshot;
   }
-  const removedAccountIds = getRemovedAccountIds(previousSnapshot.session, currentSnapshot.session);
+  const currentSession = normalizeSessionShape(currentSnapshot.session);
+  if (!previousSnapshot?.session || previousSnapshot.session.pin !== currentSession.pin) {
+    return {
+      ...currentSnapshot,
+      session: currentSession,
+    };
+  }
+  const previousSession = normalizeSessionShape(previousSnapshot.session);
+  const removedAccountIds = getRemovedAccountIds(previousSession, currentSession);
   const removedAccountList = [...removedAccountIds];
-  const mergedAssignments = mergeAssignments(currentSnapshot.session.assignments || {}, previousSnapshot.session.assignments || {});
+  const mergedAssignments = mergeAssignments(currentSession.assignments, previousSession.assignments);
   return {
     ...previousSnapshot,
     ...currentSnapshot,
     session: {
-      ...previousSnapshot.session,
-      ...currentSnapshot.session,
+      ...previousSession,
+      ...currentSession,
       removedAccountIds: removedAccountList,
       participants: filterRemovedAccountItems(
-        mergeUniqueBy(previousSnapshot.session.participants || [], currentSnapshot.session.participants || [], (item) => item.accountId || item.id),
+        mergeUniqueBy(previousSession.participants, currentSession.participants, (item) => item.accountId || item.id),
         removedAccountIds,
       ),
       userAccounts: filterRemovedAccountItems(
-        mergeUniqueBy(previousSnapshot.session.userAccounts || [], currentSnapshot.session.userAccounts || [], (item) => item.id || item.alias),
+        mergeUniqueBy(previousSession.userAccounts, currentSession.userAccounts, (item) => item.id || item.alias),
         removedAccountIds,
       ),
-      customScenarios: mergeUniqueBy(previousSnapshot.session.customScenarios || [], currentSnapshot.session.customScenarios || [], (item) => item.id),
+      customScenarios: mergeUniqueBy(previousSession.customScenarios, currentSession.customScenarios, (item) => item.id),
+      customStimuli: mergeUniqueBy(previousSession.customStimuli, currentSession.customStimuli, (item) => item.id),
       records: filterRemovedRecords(
-        mergeUniqueBy(previousSnapshot.session.records || [], currentSnapshot.session.records || [], (item) => item.id || `${item.assignmentId}-${item.completedAt}`),
+        mergeUniqueBy(previousSession.records, currentSession.records, (item) => item.id || `${item.assignmentId}-${item.completedAt}`),
         removedAccountIds,
       ),
       assignments: filterRemovedAccountMap(mergedAssignments, removedAccountIds),
-      userModes: filterRemovedAccountMap(mergeAccountMap(currentSnapshot.session.userModes || {}, previousSnapshot.session.userModes || {}), removedAccountIds),
-      learnModules: filterRemovedAccountMap(mergeAccountMap(currentSnapshot.session.learnModules || {}, previousSnapshot.session.learnModules || {}), removedAccountIds),
-      currentUserId: removedAccountIds.has(currentSnapshot.session.currentUserId) ? null : currentSnapshot.session.currentUserId,
+      userModes: filterRemovedAccountMap(mergeAccountMap(currentSession.userModes, previousSession.userModes), removedAccountIds),
+      learnModules: filterRemovedAccountMap(mergeAccountMap(currentSession.learnModules, previousSession.learnModules), removedAccountIds),
+      currentUserId: removedAccountIds.has(currentSession.currentUserId) ? null : currentSession.currentUserId,
     },
     events: filterRemovedAccountItems(
       mergeUniqueBy(previousSnapshot.events || [], currentSnapshot.events || [], (item) => item.id || `${item.accountId || ""}-${item.source || ""}-${item.createdAt || ""}`),
@@ -286,6 +326,10 @@ export function mergeLiveStateSnapshot(currentSnapshot, previousSnapshot) {
     ),
     practiceMetrics: filterRemovedByAccountMetrics(mergeByAccount(currentSnapshot.practiceMetrics || {}, previousSnapshot.practiceMetrics || {}), removedAccountIds),
     assessmentMetrics: filterRemovedByAccountMetrics(mergeByAccount(currentSnapshot.assessmentMetrics || {}, previousSnapshot.assessmentMetrics || {}), removedAccountIds),
+    checklistScoresByAccount: filterRemovedAccountMap(
+      mergeAccountMap(currentSnapshot.checklistScoresByAccount || {}, previousSnapshot.checklistScoresByAccount || {}),
+      removedAccountIds,
+    ),
     cueLog: filterRemovedAccountItems(mergeUniqueBy(previousSnapshot.cueLog || [], currentSnapshot.cueLog || [], logKey), removedAccountIds).slice(-400),
     hiddenLog: filterRemovedAccountItems(mergeUniqueBy(previousSnapshot.hiddenLog || [], currentSnapshot.hiddenLog || [], logKey), removedAccountIds).slice(-400),
   };
@@ -309,7 +353,7 @@ export function getStoredLiveStateSnapshot(state) {
     learnMetrics: state.learnMetrics,
     practiceMetrics: state.practiceMetrics,
     assessmentMetrics: state.assessmentMetrics,
-    checklistScores: state.checklistScores,
+    checklistScoresByAccount: state.checklistScoresByAccount,
     adminNotes: state.adminNotes,
     cueLog: state.cueLog,
     hiddenLog: state.hiddenLog,

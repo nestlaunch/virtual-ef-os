@@ -343,3 +343,13 @@ export function createInitialChecklistScores() {
     return acc;
   }, {});
 }
+
+export function getChecklistScoresForAccount(state, accountId) {
+  if (!accountId) {
+    return createInitialChecklistScores();
+  }
+  return {
+    ...createInitialChecklistScores(),
+    ...(state?.checklistScoresByAccount?.[accountId] || {}),
+  };
+}

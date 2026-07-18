@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SCENARIO_LIBRARY } from "../../state/v2Assessment";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { isCorrectLearnAnswer } from "../learn/answerMatching";
 import { COMPLETE_EVENTS, PRACTICE_GUIDES, PRACTICE_PAGE_OVERRIDES } from "../practice/practiceGuides";
 import { completedStepsMap, getDetectedObservedStep } from "../practice/practiceProgress";
 import { buildPracticeGuide, flattenGuideSteps } from "../practice/practiceGuideUtils";
+import { GuideCursor, getGuideTargetSelectors } from "../system/GuideCursor";
 import { getAssessmentAnswerChecksForCriteria } from "../taskAnswerChecks";
 import { canSubmitAssessmentTask } from "./assessmentTaskState";
 
@@ -56,14 +57,17 @@ export function AssessmentStartOverlay() {
   return (
     <aside className="assessment-start-overlay" data-assessment-control="true" data-support-ui="true">
       <div>
-        <span>Assessment</span>
+        <span>Independent assessment</span>
         <strong>{scenario.title}</strong>
         <p>{scenario.description}</p>
+        <div className="assessment-support-change" role="note">
+          Practice has ended. Step-by-step help and highlights will be hidden during this activity. You may still ask the clinician for help.
+        </div>
         <div className="assessment-start-details">
           {scenario.successCriteria.map((item) => <em key={item}>{item}</em>)}
         </div>
         <button type="button" onClick={() => startAssessmentAssignment(userId)}>
-          Start
+          Begin independent assessment
         </button>
       </div>
     </aside>
@@ -84,6 +88,7 @@ export function AssessmentTaskPanel() {
   const [answers, setAnswers] = useState({});
   const [answerStatus, setAnswerStatus] = useState({});
   const [submitConfirmAt, setSubmitConfirmAt] = useState(null);
+  const cardRef = useRef(null);
   const answerChecks = getAssessmentAnswerChecksForCriteria(scenario?.successCriteria);
   const assessmentGuide = useMemo(() => buildPracticeGuide(
     scenario,
@@ -96,7 +101,10 @@ export function AssessmentTaskPanel() {
     () => answerChecks.filter((check) => isAssessmentAnswerAvailable(check, completed)),
     [answerChecks, completed]
   );
+  const activeStep = useMemo(() => allSteps.find((step) => !completed[step.id]) || allSteps[0], [allSteps, completed]);
   const canSubmit = canSubmitAssessmentTask(answerChecks, answerStatus);
+  const isOfflineAssessment = state.workspace?.mode === "local";
+  const elapsedMs = completedAt && startedByUserAt ? Math.max(0, completedAt - startedByUserAt) : null;
 
   useEffect(() => {
     setShowInstructions(false);
@@ -195,7 +203,13 @@ export function AssessmentTaskPanel() {
   }
 
   return (
-    <aside className="assessment-task-card" data-support-ui="true">
+    <aside className="assessment-task-card" data-support-ui="true" ref={cardRef}>
+      <GuideCursor
+        cardRef={cardRef}
+        selectors={getGuideTargetSelectors(activeStep, state.currentApp)}
+        replayKey={`${assignment.id}:${activeStep?.id || ""}:${state.currentApp}:${showInstructions ? "open" : "closed"}`}
+        autoPlay={false}
+      />
       <span>Assessment</span>
       <strong>{scenario.title}</strong>
       <button type="button" className="assessment-task-toggle" onClick={() => setShowInstructions(true)}>
@@ -264,6 +278,24 @@ export function AssessmentTaskPanel() {
           </div>
         </div>
       ) : null}
+      {isOfflineAssessment && completedAt ? (
+        <section className="assessment-offline-results" aria-live="polite">
+          <b>Assessment results</b>
+          <div>
+            <span>Task steps detected</span>
+            <strong>{metrics?.completedSteps?.length || 0}/{allSteps.length}</strong>
+          </div>
+          <div>
+            <span>Answer checks</span>
+            <strong>{metrics?.correctAnswers || 0}/{metrics?.answerAttempts || 0}</strong>
+          </div>
+          <div>
+            <span>Time taken</span>
+            <strong>{elapsedMs === null ? "-" : `${Math.max(1, Math.round(elapsedMs / 1000))} sec`}</strong>
+          </div>
+          <p>This is practice feedback, not a clinical diagnosis.</p>
+        </section>
+      ) : null}
     </aside>
   );
 }
@@ -327,7 +359,7 @@ export function AssessmentCompleteOverlay() {
   const mode = state.session.userModes[userId] || state.session.mode;
   const assignment = getLatestAssessmentAssignment(state, userId);
   const metrics = state.assessmentMetrics?.byAccount?.[userId];
-  if (mode !== "assessment" || !metrics?.completedAt || metrics.assignmentId !== assignment?.id) {
+  if (state.workspace?.mode === "local" || mode !== "assessment" || !metrics?.completedAt || metrics.assignmentId !== assignment?.id) {
     return null;
   }
   return (

@@ -355,8 +355,8 @@ button, input, select{
 }
 
 .phone-shell{
-  width:min(390px, 100vw - 20px);
-  height:min(844px, 100vh - 20px);
+  width:min(430px, 100vw - 20px);
+  height:min(932px, 100vh - 20px);
   background:linear-gradient(180deg, #7d5a4b, #785445);
   border-radius:34px;
   border:1px solid rgba(255, 255, 255, .15);
@@ -550,13 +550,13 @@ button, input, select{
 }
 
 .home-screen.no-widget{
-  padding-top:24px;
+  padding-top:18px;
   justify-content:flex-start
 }
 
 .home-datetime{
   text-align:center;
-  margin-bottom:18px
+  margin-bottom:10px
 }
 
 .home-time{
@@ -574,10 +574,11 @@ button, input, select{
 .home-app-row-single{
   display:grid;
   grid-template-columns:repeat(3, 1fr);
-  gap:14px 8px;
+  grid-auto-rows:max-content;
+  gap:10px 8px;
   align-items:start;
   justify-items:center;
-  padding:8px 2px 0
+  padding:6px 2px 0
 }
 
 .home-app-row-single .app-icon{
@@ -738,7 +739,8 @@ button, input, select{
 
 .home-app{
   display:grid;
-  gap:8px;
+  gap:6px;
+  justify-items:center;
   color:#fff;
   background:transparent;
   border:none;
@@ -2934,6 +2936,84 @@ button, input, select{
   color:#c7c9ce
 }
 
+.quick-scenario-settings{
+  display:grid;
+  gap:12px;
+  border:1px solid rgba(255, 255, 255, .12)
+}
+
+.quick-scenario-heading h3,
+.quick-scenario-heading p{
+  margin:0
+}
+
+.quick-scenario-heading p{
+  margin-top:4px;
+  color:#cbd5e1;
+  font-size:12px;
+  line-height:1.35
+}
+
+.quick-scenario-settings form{
+  display:grid;
+  gap:10px
+}
+
+.quick-scenario-settings label{
+  display:grid;
+  gap:6px
+}
+
+.quick-scenario-settings label span{
+  color:#cbd5e1;
+  font-size:12px;
+  font-weight:800
+}
+
+.quick-scenario-settings select{
+  width:100%;
+  min-height:42px;
+  border:1px solid rgba(255, 255, 255, .18);
+  border-radius:8px;
+  background:#111827;
+  color:#f8fafc;
+  padding:0 10px;
+  font-weight:800
+}
+
+.quick-scenario-summary{
+  border-radius:10px;
+  background:#111827;
+  padding:10px
+}
+
+.quick-scenario-summary strong{
+  display:block;
+  color:#f8fafc;
+  font-size:14px
+}
+
+.quick-scenario-summary p{
+  margin:4px 0 0;
+  color:#cbd5e1;
+  font-size:12px;
+  line-height:1.35
+}
+
+.quick-scenario-settings button{
+  min-height:44px;
+  border:none;
+  border-radius:8px;
+  background:#0f62b6;
+  color:#fff;
+  font-weight:900
+}
+
+.quick-scenario-settings button:disabled{
+  background:#5a5b61;
+  color:#c7c9ce
+}
+
 .metrics-box{
   background:#202026;
   border:1px solid rgba(255, 255, 255, .14);
@@ -3129,8 +3209,8 @@ button, input, select{
 }
 
 .android-replica{
-  width:min(390px, calc(100vw - 32px));
-  height:min(844px, calc(100vh - 104px));
+  width:min(430px, calc(100vw - 32px));
+  height:min(932px, calc(100vh - 104px));
   outline:8px solid #101318;
   outline-offset:0;
   box-shadow:0 0 0 2px #2c323d, 0 36px 72px #17203347
@@ -3586,7 +3666,7 @@ button, input, select{
 }
 
 .android-replica{
-  height:min(844px, calc(100vh - 158px))
+  height:min(844px, calc(100vh - 128px))
 }
 
 
@@ -3643,11 +3723,11 @@ body{
 }
 
 .home-app-row-single .app-icon{
-  width:66px;
-  height:66px;
+  width:60px;
+  height:60px;
   border-radius:18px;
   font-family:Segoe UI, Roboto, sans-serif;
-  font-size:24px;
+  font-size:22px;
   box-shadow:inset 0 1px 1px #ffffff9e, 0 10px 22px #192a482e
 }
 
@@ -3970,6 +4050,42 @@ body{
   pointer-events:auto!important
 }
 
+.guide-cursor{
+  position:fixed;
+  left:0;
+  top:0;
+  z-index:1000;
+  width:58px;
+  height:58px;
+  border:none;
+  background:transparent;
+  padding:0;
+  transform:translate3d(var(--guide-x), var(--guide-y), 0);
+  transition:transform .9s cubic-bezier(.22, 1, .36, 1), filter .18s ease, opacity .18s ease;
+  cursor:pointer;
+  pointer-events:auto
+}
+
+.guide-cursor img{
+  width:100%;
+  height:100%;
+  filter:drop-shadow(0 8px 12px rgba(7, 26, 58, .2))
+}
+
+.guide-cursor.moving{
+  pointer-events:none
+}
+
+.guide-cursor.parked{
+  opacity:.96
+}
+
+.guide-cursor.parked:hover,
+.guide-cursor.parked:focus-visible{
+  outline:none;
+  filter:brightness(1.06)
+}
+
 .learn-tour-card{
   position:static;
   width:min(360px, 100%);
@@ -4001,24 +4117,24 @@ body{
 }
 
 .learn-step-meta{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:8px;
+  display:grid;
+  gap:3px;
   border-radius:10px;
   background:#fff7d6;
-  padding:7px 9px
+  padding:9px 10px
 }
 
 .learn-step-meta b{
   color:#92400e;
-  font-size:12px;
-  font-weight:900
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase
 }
 
 .learn-step-meta span{
   color:#1f2937;
-  font-size:12px;
+  font-size:14px;
+  line-height:1.25;
   font-weight:900;
   text-transform:none
 }
@@ -4042,6 +4158,16 @@ body{
   background:#fff;
   padding:9px 10px;
   color:#0f376b!important;
+  font-weight:900
+}
+
+.learn-action-lock{
+  border-radius:10px;
+  background:#fff7d6;
+  border:1px solid #fde68a;
+  padding:8px 10px;
+  color:#92400e!important;
+  font-size:13px!important;
   font-weight:900
 }
 
@@ -5257,6 +5383,34 @@ body{
   color:#172033
 }
 
+.assessment-offline-results{
+  display:grid;
+  gap:10px;
+  padding:14px;
+  border-radius:14px;
+  background:#eef8f1;
+  border:1px solid #b8ddc2;
+}
+
+.assessment-offline-results > b{
+  color:#176534;
+  font-size:15px;
+}
+
+.assessment-offline-results > div{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.assessment-offline-results span,
+.assessment-offline-results p{
+  margin:0;
+  color:#476052;
+  font-size:12px;
+}
+
 .assessment-task-card > span{
   color:#0f62b6;
   font-size:12px;
@@ -6467,6 +6621,222 @@ select:disabled {
 .clinical-workspace.with-panel {
   display: block;
   padding: 12px;
+}
+
+.mode-landing {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f5f8fb;
+  color: #111827;
+}
+
+.mode-landing-panel {
+  width: min(420px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 34px;
+}
+
+.mode-landing-panel img {
+  width: min(260px, 78vw);
+  height: auto;
+  display: block;
+}
+
+.mode-choice-list {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+}
+
+.mode-choice-list button {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #d7deea;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  padding: 14px 16px;
+  text-align: left;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .08);
+}
+
+.mode-choice-list button:not(:disabled):hover {
+  border-color: #0f62b6;
+  transform: translateY(-1px);
+}
+
+.mode-choice-list button:disabled {
+  color: #8a94a6;
+  background: #f3f6fa;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.mode-choice-list span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e6edf6;
+  color: #0f376b;
+  font-weight: 900;
+}
+
+.mode-choice-list strong {
+  font-size: 18px;
+}
+
+.mode-choice-list em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.local-setup-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f5f8fb;
+  color: #111827;
+}
+
+.local-setup-panel {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 18px;
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  background: #fff;
+  padding: 28px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .1);
+}
+
+.local-setup-panel img {
+  width: 150px;
+  height: auto;
+  justify-self: center;
+}
+
+.local-setup-panel h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 30px;
+  letter-spacing: 0;
+}
+
+.local-setup-panel p {
+  margin: -8px 0 0;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.local-setup-steps {
+  display: flex;
+  gap: 8px;
+}
+
+.local-setup-steps span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e6edf6;
+  color: #0f376b;
+  font-weight: 900;
+}
+
+.local-setup-steps span.active {
+  background: #0f62b6;
+  color: #fff;
+}
+
+.local-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.local-mode-grid button,
+.local-free-choice {
+  min-height: 124px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border: 1px solid #d7deea;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #172033;
+  padding: 16px;
+  text-align: left;
+}
+
+.local-mode-grid button.active {
+  border-color: #0f62b6;
+  background: #eef6ff;
+  box-shadow: inset 0 0 0 1px #0f62b6;
+}
+
+.local-mode-grid strong,
+.local-free-choice strong {
+  color: #0f376b;
+  font-size: 18px;
+}
+
+.local-mode-grid span,
+.local-free-choice span {
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.local-setup-panel select {
+  min-height: 58px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  padding: 0 14px;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.local-setup-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
+}
+
+.local-setup-actions button {
+  min-height: 54px;
+  border: none;
+  border-radius: 8px;
+  background: #e6edf6;
+  color: #0f376b;
+  font-weight: 900;
+}
+
+.local-setup-actions button[type="submit"] {
+  background: #0f62b6;
+  color: #fff;
+}
+
+.clinical-workspace.local-mode {
+  padding: 16px;
+}
+
+.clinical-workspace.local-mode .android-replica {
+  height: min(932px, calc(100vh - 132px));
 }
 
 .admin-console {
@@ -8009,6 +8379,18 @@ select:disabled {
   font-weight: 900;
 }
 
+.join-card .identity-hint {
+  grid-column: 1 / -1;
+  color: #475569;
+  font-weight: 700;
+}
+
+.join-card input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
 .join-card select {
   height: 52px;
   border: 1px solid #cbd5e1;
@@ -8611,5 +8993,1162 @@ select:disabled {
   padding:8px 16px;
   font-size:15px;
   font-weight:800;
+}
+
+/* Singpass visual refresh */
+.phone-shell,
+.android-replica{
+  aspect-ratio:430 / 932;
+}
+
+/* Cognitive-accessible task flow */
+.phone-orientation-card,
+.task-preview-card,
+.task-review-card,
+.one-step-practice-card{
+  width:min(500px,calc(100vw - 40px));
+  align-self:center;
+  display:grid;
+  gap:16px;
+  border:2px solid #b9d6f2;
+  border-radius:22px;
+  background:#fff;
+  color:#172033;
+  padding:24px;
+  box-shadow:0 18px 44px rgba(15,35,64,.12);
+}
+
+.phone-orientation-card > span,
+.task-preview-card > span,
+.task-review-card > span,
+.one-step-practice-card > span{
+  color:#0f62b6;
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.phone-orientation-card > strong,
+.task-preview-card > strong,
+.task-review-card > strong,
+.one-step-practice-card > strong{
+  color:#14213d;
+  font-size:28px;
+  line-height:1.15;
+}
+
+.phone-orientation-card > p,
+.task-preview-card > p,
+.task-review-card > p,
+.one-step-practice-card > p{
+  margin:0;
+  color:#344054;
+  font-size:18px;
+  line-height:1.5;
+}
+
+.orientation-status,
+.task-preview-note,
+.current-task-step,
+.graded-assistance,
+.neutral-recovery,
+.task-outcome-list{
+  display:grid;
+  gap:8px;
+  border-radius:15px;
+  background:#f4f7fb;
+  padding:16px;
+}
+
+.orientation-status.complete{
+  background:#ecfdf3;
+  color:#087443;
+  font-weight:800;
+}
+
+.orientation-actions,
+.practice-help-row,
+.neutral-recovery > div{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:center;
+}
+
+.phone-orientation-card button,
+.task-preview-card button,
+.task-review-card button,
+.one-step-practice-card button{
+  min-height:48px;
+  border:1px solid #b8c6d8;
+  border-radius:12px;
+  background:#fff;
+  color:#17324d;
+  padding:0 18px;
+  font-size:16px;
+  font-weight:900;
+}
+
+.phone-orientation-card button.primary,
+.task-preview-card button.primary,
+.task-review-card button.primary{
+  border-color:#0f62b6;
+  background:#0f62b6;
+  color:#fff;
+}
+
+.phone-orientation-card button:disabled,
+.one-step-practice-card button:disabled{
+  opacity:.45;
+}
+
+.current-task-step > span,
+.graded-assistance > span{
+  color:#52647a;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.current-task-step > strong{
+  color:#14213d;
+  font-size:22px;
+  line-height:1.3;
+}
+
+.graded-assistance{
+  border:2px solid #9fc5eb;
+  background:#edf6ff;
+}
+
+.graded-assistance > strong{
+  color:#0b4f8a;
+  font-size:17px;
+}
+
+.graded-assistance > p,
+.neutral-recovery > p{
+  margin:0;
+  color:#26364b;
+  font-size:17px;
+  line-height:1.45;
+}
+
+.neutral-recovery{
+  border:2px solid #e8d5a4;
+  background:#fffaf0;
+}
+
+.task-outcome-list span{
+  color:#17623b;
+  font-size:16px;
+  font-weight:800;
+}
+
+.transfer-message{
+  border-left:4px solid #75aadb;
+  padding-left:14px;
+}
+
+.practice-help-row > span{
+  color:#64748b;
+  font-size:13px;
+  font-weight:800;
+}
+
+.practice-answer-box .neutral{
+  color:#72530d;
+  font-weight:800;
+}
+
+.assessment-support-change{
+  border:2px solid #f2c879;
+  border-radius:14px;
+  background:#fff8e8;
+  color:#5e4718;
+  padding:14px;
+  font-size:15px;
+  font-weight:800;
+  line-height:1.4;
+}
+
+/* Clinician session workflow */
+.selected-user-sticky{
+  position:sticky;
+  top:0;
+  z-index:12;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  border-bottom:1px solid #d8e0ea;
+  background:rgba(248,250,252,.97);
+  padding:12px 16px;
+  backdrop-filter:blur(12px);
+}
+
+.selected-user-sticky > div{
+  display:grid;
+  gap:2px;
+}
+
+.selected-user-sticky span{
+  color:#64748b;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+
+.selected-user-sticky strong{
+  color:#172033;
+  font-size:15px;
+  text-transform:capitalize;
+}
+
+.selected-user-sticky em,
+.device-participant-code{
+  color:#42627f;
+  font-size:11px;
+  font-style:normal;
+  font-weight:800;
+}
+
+.session-workflow-tabs{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  padding:12px 16px 4px;
+  background:#f8fafc;
+}
+
+.session-workflow-tabs button{
+  min-height:42px;
+  border:1px solid #cbd5e1;
+  border-radius:11px;
+  background:#fff;
+  color:#475569;
+  font-weight:900;
+}
+
+.session-workflow-tabs button.active{
+  border-color:#0f62b6;
+  background:#eaf4ff;
+  color:#0f528e;
+}
+
+.timeline-heading{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+}
+
+.stored-indicator{
+  border-radius:999px;
+  background:#e8f7ef;
+  color:#17623b;
+  padding:6px 9px;
+  font-size:11px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+.session-timeline-list{
+  display:grid;
+  gap:0;
+  margin:14px 0 0;
+  padding:0;
+  list-style:none;
+}
+
+.session-timeline-list li{
+  display:grid;
+  grid-template-columns:64px 1fr;
+  gap:12px;
+  border-left:2px solid #b8d4ef;
+  padding:0 0 18px 14px;
+}
+
+.session-timeline-list time{
+  color:#0f62b6;
+  font-size:12px;
+  font-weight:900;
+}
+
+.session-timeline-list div{
+  display:grid;
+  gap:3px;
+}
+
+.session-timeline-list strong{
+  color:#172033;
+  font-size:14px;
+}
+
+.session-timeline-list span{
+  color:#64748b;
+  font-size:12px;
+}
+
+@media (max-width:900px){
+  .selected-user-sticky{grid-template-columns:1fr}
+  .session-workflow-tabs{grid-template-columns:1fr}
+}
+
+.singpass-app.singpass-dark{
+  background:#f7f7f7;
+  color:#151515;
+  font-family:Inter, Roboto, "Segoe UI", Arial, sans-serif;
+}
+
+.singpass-scroll{
+  padding:0 18px 92px;
+  background:#f7f7f7;
+}
+
+.singpass-status{
+  color:#171717;
+  padding:12px 2px 7px;
+  font-size:13px;
+}
+
+.signal-bars{
+  background:linear-gradient(to top,#171717 0 35%,transparent 35%),linear-gradient(to top,#171717 0 62%,transparent 62%),linear-gradient(to top,#171717 0 100%,transparent 100%);
+  background-size:3px 100%,3px 100%,3px 100%;
+  background-position:0 0,6px 0,12px 0;
+  background-repeat:no-repeat;
+}
+
+.battery{
+  background:#171717;
+  color:#fff;
+}
+
+.singpass-brand-row{
+  display:grid;
+  grid-template-columns:40px 1fr 40px;
+  align-items:center;
+  padding:4px 0 12px;
+}
+
+.singpass-brand-row strong{
+  color:#e05c52;
+  text-align:center;
+  font-size:23px;
+  font-weight:900;
+}
+
+.singpass-round-btn,
+.singpass-topbar button{
+  width:40px;
+  height:40px;
+  border:1px solid #e8e8e8;
+  border-radius:50%;
+  background:#fff;
+  color:#262626;
+  box-shadow:0 4px 14px rgba(20,20,20,.06);
+}
+
+.singpass-welcome{
+  display:block;
+  padding:4px 0 18px;
+}
+
+.singpass-welcome p{
+  color:#707070;
+  font-size:15px;
+  font-weight:700;
+}
+
+.singpass-welcome h1{
+  color:#1f1f1f;
+  max-width:240px;
+  font-size:24px;
+  line-height:1.12;
+  font-weight:900;
+}
+
+.singpass-section-block{
+  padding:0 0 22px;
+}
+
+.singpass-section-title{
+  margin:0 0 12px;
+}
+
+.singpass-section-title strong{
+  color:#151515;
+  font-size:19px;
+  font-weight:900;
+}
+
+.singpass-section-title button,
+.singpass-title-actions button,
+.singpass-link-btn{
+  color:#e05c52;
+}
+
+.singpass-title-actions{
+  gap:10px;
+}
+
+.singpass-title-actions button{
+  min-height:30px;
+  border-radius:999px;
+  padding:0 12px;
+  background:#fff;
+  font-size:12px;
+  box-shadow:0 2px 10px rgba(20,20,20,.05);
+}
+
+.singpass-card-tabs{
+  margin-bottom:12px;
+  padding-bottom:2px;
+  gap:8px;
+}
+
+.singpass-card-tabs button{
+  min-height:34px;
+  border:none;
+  border-radius:999px;
+  background:#fff;
+  color:#777;
+  padding:0 14px;
+  font-size:12px;
+  box-shadow:0 2px 10px rgba(20,20,20,.05);
+}
+
+.singpass-card-tabs button.active{
+  background:#e05c52;
+  color:#fff;
+  box-shadow:0 8px 18px rgba(224,92,82,.24);
+}
+
+.singpass-identity-card{
+  min-height:282px;
+  border:none;
+  border-radius:20px;
+  padding:18px;
+  box-shadow:0 18px 34px rgba(104,25,25,.18);
+}
+
+.singpass-identity-card.nric{
+  background:linear-gradient(135deg,#fff1f0 0%,#ffd8d4 46%,#f36f65 100%);
+  border-color:transparent;
+  color:#371818;
+}
+
+.singpass-identity-card.licence{
+  background:linear-gradient(135deg,#e9f6ef 0%,#b9e4ce 100%);
+  border-color:transparent;
+}
+
+.singpass-identity-card.chas{
+  background:linear-gradient(135deg,#eaf1ff 0%,#c6dcff 100%);
+  border-color:transparent;
+}
+
+.sg-header{
+  display:grid;
+  grid-template-columns:42px 1fr;
+  align-items:center;
+  gap:11px;
+  margin-bottom:18px;
+}
+
+.sg-crest{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:#e05c52;
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+}
+
+.sg-header strong{
+  color:#3b1b1b;
+  font-size:12px;
+  letter-spacing:.1em;
+}
+
+.sg-header span{
+  color:#6f3535;
+  font-size:10px;
+}
+
+.id-body{
+  grid-template-columns:92px 1fr;
+  gap:16px;
+}
+
+.photo-placeholder{
+  width:92px;
+  height:112px;
+  align-self:start;
+  border:3px solid rgba(255,255,255,.78);
+  border-radius:14px;
+  background:linear-gradient(180deg,#f5d4c4 0%,#d89c86 100%);
+  color:#7d352d;
+}
+
+.photo-placeholder span{
+  width:64px;
+  height:64px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:rgba(255,255,255,.42);
+  font-size:20px;
+  font-weight:900;
+}
+
+.id-body h2{
+  color:#331616;
+  margin:0 0 10px;
+  font-size:18px;
+  line-height:1.15;
+}
+
+.id-body dl{
+  grid-template-columns:1fr;
+  gap:7px;
+}
+
+.id-body dt{
+  display:block;
+  color:#7b3a35;
+  margin:0 0 2px;
+  font-size:9px;
+  text-transform:uppercase;
+}
+
+.id-body dd{
+  display:block;
+  color:#2a1111;
+  font-size:13px;
+}
+
+.singpass-identity-card footer{
+  margin-top:14px;
+  border-top:1px solid rgba(86,22,22,.13);
+  color:rgba(43,17,17,.48);
+  font-size:9px;
+}
+
+.singpass-hidden-card,
+.singpass-login-shortcut,
+.singpass-pending-banner,
+.singpass-dark-card,
+.singpass-result-card,
+.singpass-approval-hero{
+  border:1px solid #ebebeb;
+  background:#fff;
+  color:#171717;
+}
+
+.singpass-hidden-card strong,
+.singpass-login-shortcut strong,
+.singpass-pending-banner strong{
+  color:#171717;
+}
+
+.singpass-barcode-btn{
+  margin:-8px 0 22px;
+  border-radius:16px;
+  background:#fff;
+  color:#e05c52;
+  box-shadow:0 8px 22px rgba(20,20,20,.06);
+}
+
+.singpass-profile-strip span{
+  border:none;
+  background:#fff;
+  color:#e05c52;
+  box-shadow:0 6px 16px rgba(20,20,20,.06);
+}
+
+.singpass-profile-strip strong,
+.singpass-service-grid button strong{
+  color:#3e3e3e;
+}
+
+.singpass-favourites p{
+  color:#777;
+}
+
+.singpass-service-grid{
+  gap:14px 10px;
+}
+
+.singpass-service-grid button span{
+  box-shadow:0 6px 16px rgba(20,20,20,.08);
+}
+
+.singpass-login-shortcut{
+  margin-top:0;
+  border-radius:18px;
+  box-shadow:0 8px 22px rgba(20,20,20,.06);
+}
+
+.singpass-bottom-nav{
+  grid-template-columns:repeat(3,1fr);
+  border-top:1px solid #ececec;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 -8px 28px rgba(20,20,20,.06);
+}
+
+.singpass-bottom-nav button{
+  color:#8a8a8a;
+}
+
+.singpass-bottom-nav button.active{
+  background:#fff1f0;
+  color:#e05c52;
+}
+
+.singpass-topbar{
+  background:#f7f7f7;
+}
+
+.singpass-topbar strong,
+.singpass-page-head h1,
+.singpass-approval-hero h2,
+.singpass-result-card h2,
+.singpass-login-screen h1,
+.singpass-scan-card h2{
+  color:#171717;
+}
+
+.singpass-login-panel,
+.singpass-sheet{
+  border-color:#ebebeb;
+  background:#fff;
+  color:#171717;
+}
+
+.singpass-login-panel input,
+.singpass-search input{
+  border-color:#dedede;
+  background:#fff;
+  color:#171717;
+}
+
+.singpass-detail-row{
+  border-bottom-color:#eeeeee;
+}
+
+.singpass-detail-row span,
+.singpass-login-panel label span,
+.singpass-approval-hero span,
+.singpass-result-card span,
+.singpass-login-screen p,
+.singpass-sheet p{
+  color:#686868;
+}
+
+.singpass-detail-row strong{
+  color:#171717;
+}
+
+.singpass-primary-btn{
+  background:#e05c52;
+}
+
+.singpass-secondary-btn{
+  background:#f0f0f0;
+  color:#171717;
+}
+
+.singpass-sheet h2,
+.singpass-sheet button{
+  color:#171717;
+}
+
+.singpass-sheet button{
+  border-color:#eeeeee;
+  background:#fafafa;
+}
+
+.sheet-handle{
+  background:#d0d0d0;
+}
+
+/* Slim phone + compact Singpass scale */
+.phone-shell,
+.android-replica{
+  width:min(355px, calc(100vw - 20px));
+  height:min(770px, calc(100vh - 20px));
+  aspect-ratio:355 / 770;
+  border-radius:32px;
+}
+
+.android-replica{
+  border-width:8px;
+}
+
+.clinical-workspace.local-mode .android-replica{
+  width:min(355px, calc(100vw - 32px));
+  height:min(770px, calc(100vh - 124px));
+}
+
+.singpass-app.singpass-dark{
+  background:#fff;
+}
+
+.singpass-scroll{
+  padding:0 16px 72px;
+  background:#fff;
+}
+
+.singpass-app .singpass-status{
+  display:none;
+}
+
+.singpass-brand-row{
+  display:grid;
+  grid-template-columns:1fr 30px;
+  padding:0 0 2px;
+}
+
+.singpass-brand-row > span,
+.singpass-brand-row strong{
+  display:none;
+}
+
+.singpass-round-btn,
+.singpass-topbar button{
+  width:28px;
+  height:28px;
+  border:none;
+  background:transparent;
+  box-shadow:none;
+  font-size:13px;
+}
+
+.singpass-welcome{
+  padding:0 0 14px;
+}
+
+.singpass-welcome p{
+  margin:0;
+  color:#60646c;
+  font-size:12px;
+  font-weight:800;
+}
+
+.singpass-welcome h1{
+  max-width:210px;
+  margin-top:2px;
+  font-size:18px;
+  line-height:1.08;
+}
+
+.singpass-home > .singpass-section-block:first-of-type .singpass-section-title{
+  display:none;
+}
+
+.singpass-section-block{
+  padding:0 0 20px;
+}
+
+.singpass-section-title{
+  margin:0 0 10px;
+}
+
+.singpass-section-title strong{
+  font-size:14px;
+}
+
+.singpass-section-title button{
+  font-size:11px;
+}
+
+.singpass-card-tabs{
+  gap:8px;
+  margin-bottom:10px;
+  padding-bottom:0;
+}
+
+.singpass-card-tabs button{
+  min-height:26px;
+  padding:0 12px;
+  font-size:9px;
+  box-shadow:none;
+}
+
+.singpass-card-tabs button:nth-of-type(2),
+.singpass-card-tabs button:nth-of-type(3){
+  display:none;
+}
+
+.singpass-identity-card{
+  width:min(100%, 240px);
+  min-height:132px;
+  margin:0 auto;
+  gap:6px;
+  border-radius:10px;
+  padding:9px 10px;
+  box-shadow:none;
+}
+
+.singpass-identity-card.nric{
+  background:
+    radial-gradient(circle at 95% 90%, rgba(224, 92, 82, .22) 0 35%, transparent 36%),
+    repeating-radial-gradient(circle at 94% 90%, rgba(224, 92, 82, .2) 0 1px, transparent 1px 10px),
+    linear-gradient(135deg,#ffd9dc 0%,#ffb6bd 100%);
+}
+
+.sg-header{
+  grid-template-columns:1fr 32px;
+  gap:6px;
+  margin-bottom:7px;
+}
+
+.sg-crest{
+  order:2;
+  width:28px;
+  height:28px;
+  font-size:8px;
+}
+
+.sg-header strong{
+  font-size:8px;
+  letter-spacing:.04em;
+}
+
+.sg-header span{
+  font-size:6px;
+  letter-spacing:.05em;
+}
+
+.id-body{
+  grid-template-columns:52px 1fr;
+  gap:10px;
+  align-items:center;
+}
+
+.photo-placeholder{
+  width:52px;
+  height:62px;
+  border-width:2px;
+  border-radius:8px;
+}
+
+.photo-placeholder span{
+  width:34px;
+  height:34px;
+  font-size:11px;
+}
+
+.id-body h2{
+  display:none;
+}
+
+.id-body dl{
+  gap:3px;
+}
+
+.id-body dl div:not(:first-child){
+  display:none;
+}
+
+.id-body dt{
+  color:#6d5355;
+  font-size:8px;
+  text-transform:none;
+}
+
+.id-body dd{
+  color:#252329;
+  font-size:10px;
+  font-weight:900;
+}
+
+.singpass-identity-card footer{
+  display:none;
+}
+
+.singpass-barcode-btn{
+  min-height:32px;
+  margin:4px 0 18px;
+  background:transparent;
+  box-shadow:none;
+  gap:5px;
+  font-size:10px;
+}
+
+.barcode-lines{
+  width:18px;
+  height:13px;
+  background:repeating-linear-gradient(90deg,#171717 0 1px,transparent 1px 3px,#171717 3px 4px,transparent 4px 6px);
+}
+
+.singpass-profile-strip{
+  gap:18px;
+  padding-bottom:3px;
+}
+
+.singpass-profile-strip button{
+  width:44px;
+  flex-basis:44px;
+  gap:5px;
+}
+
+.singpass-profile-strip span{
+  width:38px;
+  height:38px;
+  font-size:12px;
+  border-radius:12px;
+  background:#f8f8f8;
+  box-shadow:none;
+}
+
+.singpass-profile-strip strong{
+  color:#777;
+  font-size:9px;
+  line-height:1.15;
+}
+
+.singpass-service-grid{
+  grid-template-columns:repeat(3, 1fr);
+  gap:18px 22px;
+  justify-items:center;
+}
+
+.singpass-service-grid button{
+  width:50px;
+  gap:5px;
+}
+
+.singpass-service-grid button span{
+  width:40px;
+  height:40px;
+  border-radius:13px;
+  font-size:8px;
+  box-shadow:none;
+}
+
+.singpass-service-grid button strong{
+  color:#6f737a;
+  font-size:9px;
+  line-height:1.05;
+}
+
+.singpass-view-all-shortcuts{
+  display:none;
+}
+
+.singpass-bottom-nav{
+  min-height:54px;
+  padding:5px 12px 12px;
+  box-shadow:0 -2px 12px rgba(20,20,20,.06);
+}
+
+.singpass-bottom-nav button{
+  min-height:38px;
+  border-radius:10px;
+}
+
+.singpass-bottom-nav button span{
+  font-size:14px;
+}
+
+.singpass-bottom-nav button strong{
+  font-size:8px;
+}
+
+/* Final simulator layout: phone and task support are distinct responsive items. */
+.clinical-workspace.patient-only{
+  place-items:stretch;
+}
+
+.simulator-stage{
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.simulator-stage.with-side-panel{
+  width:min(100%, 980px);
+  grid-template-columns:minmax(0, 355px) minmax(320px, 440px);
+  grid-template-rows:auto minmax(0, auto);
+  column-gap:clamp(28px, 5vw, 72px);
+  row-gap:18px;
+  align-items:center;
+  justify-content:center;
+  justify-items:stretch;
+  margin-inline:auto;
+}
+
+.simulator-stage.with-side-panel > .patient-session-chip{
+  grid-column:1 / -1;
+  grid-row:1;
+  justify-self:center;
+  margin:0;
+}
+
+.simulator-stage.with-side-panel > .phone-shell{
+  grid-column:1;
+  grid-row:2;
+  justify-self:end;
+  min-width:0;
+}
+
+.simulator-stage.with-side-panel > :is(
+  .phone-orientation-card,
+  .learn-tour-card,
+  .learn-success-page,
+  .practice-guide-card,
+  .assessment-task-card,
+  .free-task-card
+){
+  grid-column:2;
+  grid-row:2;
+  width:100%;
+  max-width:440px;
+  min-width:0;
+  justify-self:start;
+  align-self:center;
+  box-sizing:border-box;
+}
+
+.simulator-stage.with-side-panel :is(
+  .phone-orientation-card,
+  .learn-tour-card,
+  .learn-success-page,
+  .practice-guide-card,
+  .assessment-task-card,
+  .free-task-card
+) *{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+@media (max-width:960px){
+  .clinical-workspace.patient-only,
+  .clinical-workspace.local-mode{
+    place-items:stretch;
+  }
+
+  .simulator-stage.with-side-panel{
+    grid-template-columns:minmax(0, 1fr);
+    grid-template-rows:auto auto auto;
+    row-gap:24px;
+    justify-items:center;
+    padding-bottom:24px;
+  }
+
+  .simulator-stage.with-side-panel > .patient-session-chip{
+    grid-column:1;
+    grid-row:1;
+  }
+
+  .simulator-stage.with-side-panel > .phone-shell{
+    grid-column:1;
+    grid-row:2;
+    justify-self:center;
+  }
+
+  .simulator-stage.with-side-panel > :is(
+    .phone-orientation-card,
+    .learn-tour-card,
+    .learn-success-page,
+    .practice-guide-card,
+    .assessment-task-card,
+    .free-task-card
+  ){
+    grid-column:1;
+    grid-row:3;
+    width:min(440px, calc(100vw - 32px));
+    justify-self:center;
+  }
+}
+
+@media (max-width:560px){
+  .patient-session-chip{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr auto;
+    border-radius:16px;
+    box-sizing:border-box;
+  }
+
+  .patient-session-chip span{
+    grid-column:1 / -1;
+  }
+
+  .orientation-actions,
+  .practice-actions,
+  .practice-help-row,
+  .neutral-recovery > div{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+
+  .orientation-actions button,
+  .practice-actions button,
+  .neutral-recovery button{
+    width:100%;
+  }
+
+  .assessment-start-overlay,
+  .assessment-complete-overlay{
+    padding:14px;
+    overflow:auto;
+  }
+
+  .assessment-start-overlay > div,
+  .assessment-complete-overlay > div{
+    box-sizing:border-box;
+    max-height:100%;
+    overflow:auto;
+  }
+}
+
+/* Phone Settings tables must fit the simulated phone instead of being clipped. */
+.phone-shell .settings-app .eval-table-wrap{
+  max-width:100%;
+  overflow-x:hidden;
+}
+
+.phone-shell .settings-app .eval-table{
+  width:100%;
+  min-width:0;
+  table-layout:fixed;
+}
+
+.phone-shell .settings-app .eval-table th,
+.phone-shell .settings-app .eval-table td{
+  min-width:0;
+  padding:6px;
+  font-size:11px;
+  line-height:1.3;
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+
+.phone-shell .settings-app .eval-table th:nth-child(2),
+.phone-shell .settings-app .eval-table td:nth-child(2){
+  width:22%;
+}
+
+.phone-shell .settings-app .eval-table th:nth-child(3),
+.phone-shell .settings-app .eval-table td:nth-child(3){
+  width:34%;
+}
+
+.phone-gate-reminder{
+  padding:12px 14px;
+  border:1px solid #b8d5f3;
+  border-radius:12px;
+  background:#eef7ff;
+  color:#123f6b;
+  font-size:14px;
+  font-weight:700;
+  line-height:1.4;
 }
 

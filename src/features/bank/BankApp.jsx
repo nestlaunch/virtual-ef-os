@@ -2,15 +2,15 @@ import { useMemo, useState } from "react";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 
 const ACCOUNTS = [
-  { id: "posb-savings", name: "POSB eSavings", number: "034-1-22-908", balance: 1842.5 },
-  { id: "posb-current", name: "POSB Current", number: "034-8-18-440", balance: 420.1 },
+  { id: "sunrise-savings", name: "Sunrise Savings", number: "034-1-22-908", balance: 1842.5 },
+  { id: "sunrise-current", name: "Sunrise Current", number: "034-8-18-440", balance: 420.1 },
 ];
 
 const PAYEES = [
   { id: "hougang-polyclinic", name: "Hougang Polyclinic", bank: "Bill payment", trusted: true },
   { id: "imh", name: "IMH Clinic B", bank: "Bill payment", trusted: true },
   { id: "mother", name: "Mother", bank: "PayNow mobile", trusted: true },
-  { id: "dbs-security", name: "DBS Security Officer Alan", bank: "New payee from SMS", trusted: false, scam: true },
+  { id: "sunrise-security", name: "Sunrise Security Officer Alan", bank: "New payee from SMS", trusted: false, scam: true },
 ];
 
 const FLOW_STEPS = [
@@ -104,7 +104,7 @@ export function BankApp() {
     setTokenApproved(false);
     setTransfer({
       from: ACCOUNTS[0].id,
-      payee: "dbs-security",
+      payee: "sunrise-security",
       amount: "500.00",
       note: "Account unlock verification",
     });
@@ -165,7 +165,7 @@ export function BankApp() {
       <div className="bank-app bank-login">
         <div className="bank-login-card">
           <div className="bank-brand">
-            <span>POSB</span>
+            <span>Sunrise</span>
             <strong>Practice Bank</strong>
           </div>
           <h2>Welcome back</h2>
@@ -194,7 +194,7 @@ export function BankApp() {
           <section className="bank-scam-card">
             <span className="bank-alert-label">Potential scam message</span>
             <p className="bank-fake-message">
-              POSB: Your account has been locked. Transfer S$500 to security officer Alan now to verify your account.
+              Sunrise Bank: Your account has been locked. Transfer S$500 to security officer Alan now to verify your account.
               Do not tell anyone. Approval required in 10 minutes.
             </p>
           </section>
@@ -506,7 +506,7 @@ export function BankApp() {
         <section className="bank-balance-card">
           <span>Total balance</span>
           <strong>{formatMoney(ACCOUNTS.reduce((sum, account) => sum + account.balance, 0))}</strong>
-          <p>POSB Practice Bank</p>
+          <p>Sunrise Practice Bank</p>
         </section>
 
         <section className="bank-quick-actions">
@@ -531,7 +531,7 @@ export function BankApp() {
         {!isLearnMode ? (
           <section className="bank-panel bank-scam-teaser">
             <span>Security alert practice</span>
-            <p>Learn what to do when someone claims to be from POSB and asks for an urgent transfer.</p>
+            <p>Learn what to do when someone claims to be from Sunrise Bank and asks for an urgent transfer.</p>
             <button type="button" onClick={startScamScenario}>Start scam scenario</button>
           </section>
         ) : null}
@@ -554,7 +554,7 @@ export function BankApp() {
 function BankHeader({ onHome }) {
   return (
     <header className="bank-header">
-      <button type="button" onClick={onHome} aria-label="Bank home">POSB</button>
+      <button type="button" onClick={onHome} aria-label="Bank home">Sunrise</button>
       <div>
         <strong>digibank practice</strong>
         <span>Simulated banking</span>

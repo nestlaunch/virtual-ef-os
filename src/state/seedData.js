@@ -89,8 +89,8 @@ export const formalThreads = [
   },
   {
     id: "bank",
-    sender: "DBS Bank",
-    preview: "Fr DBS: ALERT: DO NOT share this OTP with anyone.",
+    sender: "Sunrise Bank",
+    preview: "Fr Sunrise Bank: ALERT: DO NOT share this OTP with anyone.",
     timeLabel: "19 Mar",
     unread: 28,
     avatarColor: "#ff64ba",
