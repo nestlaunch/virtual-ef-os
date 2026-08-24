@@ -8,8 +8,8 @@ binding = "SITE_ASSETS"
 not_found_handling = "single-page-application"
 
 [vars]
-# Comma-separated production origins. Leave empty while testing same-origin deploys.
-ALLOWED_ORIGINS = "https://dailydigital.pages.dev"
+# Production plus local Vite/preview origins used for clinician trials.
+ALLOWED_ORIGINS = "https://dailydigital.pages.dev,http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:5173,http://localhost:5173"
 
 [[d1_databases]]
 binding = "DB"

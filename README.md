@@ -154,6 +154,12 @@ In the current browser prototype, PIN validation and device counting are stored 
 
 ## Cloudflare Backend Direction
 
+The standard frontend build connects to the deployed Daily Digital Worker at
+`https://daily-digital.kuanghong.workers.dev`, so Online mode is available in
+local Vite development, local preview builds, and the deployed Pages app. Set
+`VITE_API_BASE_URL` at build time only when intentionally targeting a different
+Worker deployment.
+
 The planned deployment target is Cloudflare. A good backend structure would be:
 
 ```text

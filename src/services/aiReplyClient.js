@@ -1,4 +1,6 @@
-const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+import { getConfiguredCloudApiBaseUrl } from "./cloudEndpoint.js";
+
+const API_BASE_URL = getConfiguredCloudApiBaseUrl();
 
 function parseJsonFromText(text) {
   const raw = String(text || "").trim();

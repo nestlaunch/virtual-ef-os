@@ -1,6 +1,7 @@
 import { getStoredLiveStateSnapshot, mergeLiveStateSnapshot } from "./sessionStore.js";
+import { getConfiguredCloudApiBaseUrl } from "../services/cloudEndpoint.js";
 
-const API_BASE_URL = String(import.meta.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const API_BASE_URL = getConfiguredCloudApiBaseUrl();
 const SYNC_STATE_KEY = "daily-digital-cloud-sync-v2";
 const ADMIN_KEY_STORAGE = "daily-digital-admin-key-v1";
 const SYNC_INTERVAL_MS = 2500;
