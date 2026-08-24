@@ -36,6 +36,15 @@ const ASSESSMENT_DOMAINS = [
   { id: "cueing", label: "Cueing required", evidence: "Specific therapist prompts needed after independent-first attempt." },
 ];
 
+const PATIENT_THEME_PALETTE = [
+  { tile: "#e7f1ff", page: "#f3f8ff", accent: "#4f83c2", ink: "#214f82" },
+  { tile: "#f0eaff", page: "#f8f5ff", accent: "#8068b2", ink: "#543f82" },
+  { tile: "#e4f6ee", page: "#f2fbf7", accent: "#4c9877", ink: "#28674e" },
+  { tile: "#fff0df", page: "#fff8f0", accent: "#c78345", ink: "#805022" },
+  { tile: "#fbe8ef", page: "#fff5f8", accent: "#b96786", ink: "#7d3f59" },
+  { tile: "#edf3df", page: "#f7faef", accent: "#78934f", ink: "#4f682e" },
+];
+
 function statusFrom(ok, mixed = false) {
   if (ok) return "Tracked";
   return mixed ? "Emerging" : "Insufficient evidence";
@@ -400,10 +409,11 @@ export function AdminPanel() {
   } = useVirtualOS();
 
   const [activeTab, setActiveTab] = useState("current");
-  const [sessionView, setSessionView] = useState("run");
+  const [sessionView, setSessionView] = useState("waiting");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
-  const [pendingMode, setPendingMode] = useState("learn");
+  const [selectedAccountIds, setSelectedAccountIds] = useState([]);
+  const [pendingMode, setPendingMode] = useState(state.session.mode || "practice");
   const [targetUserId, setTargetUserId] = useState("all");
   const [learnAppId, setLearnAppId] = useState(LEARN_APP_CATALOG[0].id);
   const [scenarioId, setScenarioId] = useState(SCENARIO_LIBRARY[0]?.id || "");
@@ -426,6 +436,9 @@ export function AdminPanel() {
     : null;
   const modeTargetAccount = selectedAccount || fallbackAccount;
   const modeTargetParticipant = selectedParticipant || fallbackParticipant;
+  const selectedAssignmentAccounts = selectedAccountIds
+    .map((accountId) => sessionAccounts.find((account) => account.id === accountId))
+    .filter((account) => account && joinedPatients.some((participant) => participant.accountId === account.id));
   const currentMode = modeTargetAccount
     ? modeTargetParticipant?.mode || state.session.userModes[modeTargetAccount.id] || state.session.mode
     : state.session.mode;
@@ -442,6 +455,7 @@ export function AdminPanel() {
   useEffect(() => {
     if (!selectedAccountId && fallbackAccount) {
       setSelectedAccountId(fallbackAccount.id);
+      setSelectedAccountIds([fallbackAccount.id]);
       setTargetUserId(fallbackAccount.id);
       setPendingMode(state.session.userModes[fallbackAccount.id] || fallbackParticipant?.mode || state.session.mode);
     }
@@ -461,34 +475,84 @@ export function AdminPanel() {
     setModeConfirmText("");
   }
 
+  function toggleAssignmentAccount(accountId) {
+    const alreadySelected = selectedAccountIds.includes(accountId);
+    const nextSelectedIds = alreadySelected
+      ? selectedAccountIds.filter((id) => id !== accountId)
+      : [...selectedAccountIds, accountId];
+    setSelectedAccountIds(nextSelectedIds);
+    const nextFocusedId = alreadySelected
+      ? (selectedAccountId === accountId ? nextSelectedIds[0] || "" : selectedAccountId)
+      : accountId;
+    setSelectedAccountId(nextFocusedId);
+    setTargetUserId(nextSelectedIds.length === joinedPatients.length ? "all" : nextFocusedId || "all");
+    if (nextFocusedId) {
+      setPendingMode(state.session.userModes[nextFocusedId] || state.session.mode);
+    }
+    setModeConfirmText("");
+  }
+
+  function removeConnectedPatient(account) {
+    const label = formatAlias(account.alias);
+    if (!window.confirm(`Remove ${label} from Connected patients? This also deletes this de-identified profile and its saved progress records.`)) {
+      return;
+    }
+    removeUserAccount(account.id);
+    setSelectedAccountIds((accountIds) => accountIds.filter((id) => id !== account.id));
+    if (selectedAccountId === account.id) {
+      setSelectedAccountId("");
+      setTargetUserId("all");
+      setSessionView("waiting");
+      setModeConfirmText("");
+    }
+  }
+
   function confirmEndSession() {
     if (window.confirm("End this session for all joined users? They will have 30 seconds before the rating overlay appears.")) {
       markEvaluationCompleted();
     }
   }
 
-  function pushPracticeScenario() {
-    if (!scenarioId) return;
-    pushScenario(scenarioId, targetUserId);
+  function createNewSessionPin() {
+    if (joinedPatients.length > 0 && !window.confirm("Create a new session PIN? Joined patients will need to reconnect using the new PIN.")) {
+      return;
+    }
+    createSession();
+    setSelectedAccountId("");
+    setSelectedAccountIds([]);
+    setTargetUserId("all");
+    setSessionView("waiting");
+  }
+
+  function getAssignmentTargetIds() {
+    const connectedIds = new Set(joinedPatients.map((participant) => participant.accountId));
+    const selectedIds = selectedAccountIds.filter((accountId) => connectedIds.has(accountId));
+    if (selectedIds.length > 0) return selectedIds;
+    return modeTargetAccount && connectedIds.has(modeTargetAccount.id) ? [modeTargetAccount.id] : [];
+  }
+
+  function pushPracticeScenario(targetIds = getAssignmentTargetIds()) {
+    if (!scenarioId || targetIds.length === 0) return;
+    targetIds.forEach((accountId) => pushScenario(scenarioId, accountId));
     openApp("home");
   }
 
-  function pushAssessmentScenario() {
-    if (!assessmentScenarioId) return;
-    pushAssessment(assessmentScenarioId, targetUserId);
+  function pushAssessmentScenario(targetIds = getAssignmentTargetIds()) {
+    if (!assessmentScenarioId || targetIds.length === 0) return;
+    targetIds.forEach((accountId) => pushAssessment(assessmentScenarioId, accountId));
     openApp("home");
   }
 
-  function pushFreeStimulus() {
-    if (!freeStimulusMessage.trim()) return;
-    pushCustomStimulus({
-      app: freeStimulusApp,
-      targetId: targetUserId,
-      title: freeStimulusTitle,
-      message: freeStimulusMessage,
-      preview: freeStimulusMessage,
-      instructions: freeStimulusEncouragement,
-    });
+  function pushFreeStimulus(targetIds = getAssignmentTargetIds()) {
+    if (!freeStimulusMessage.trim() || targetIds.length === 0) return;
+    targetIds.forEach((accountId) => pushCustomStimulus({
+        app: freeStimulusApp,
+        targetId: accountId,
+        title: freeStimulusTitle,
+        message: freeStimulusMessage,
+        preview: freeStimulusMessage,
+        instructions: freeStimulusEncouragement,
+      }));
     openApp(freeStimulusApp === "sms" ? "sms" : "whatsapp");
   }
 
@@ -501,17 +565,12 @@ export function AdminPanel() {
     }
   }, [assessmentAccount, assessmentAccountId, assessmentIdleMs, assessmentMetrics?.lastStuckAlertAt, assessmentMetrics?.startedAt, selectedParticipant?.currentApp, state, state.currentMinutes, trackAssessmentStuck]);
 
-  function startLearnModule() {
+  function startLearnModule(targetIds = getAssignmentTargetIds()) {
     const app = LEARN_APP_CATALOG.find((item) => item.id === learnAppId) || LEARN_APP_CATALOG[0];
-    const targets = targetUserId === "all"
-      ? state.session.participants.filter((participant) => participant.role === "patient").map((participant) => participant.accountId)
-      : state.session.participants.some((participant) => participant.role === "patient" && participant.accountId === targetUserId)
-        ? [targetUserId]
-        : [];
-    if (targets.length === 0) {
+    if (targetIds.length === 0) {
       return;
     }
-    targets.filter(Boolean).forEach((accountId) => setLearnModule(accountId, app.currentApp));
+    targetIds.filter(Boolean).forEach((accountId) => setLearnModule(accountId, app.currentApp));
     openApp(app.currentApp);
   }
 
@@ -530,7 +589,31 @@ export function AdminPanel() {
     setModeConfirmText(`Sent. ${formatAlias(modeTargetAccount.alias)}'s screen will now change to ${SESSION_MODES.find((mode) => mode.id === pendingMode)?.label || pendingMode}.`);
   }
 
-  return (
+  function assignActivity() {
+    const targetIds = getAssignmentTargetIds();
+    const targetAccounts = targetIds
+      .map((accountId) => sessionAccounts.find((account) => account.id === accountId))
+      .filter(Boolean);
+    if (targetAccounts.length === 0) return;
+    const assessmentTargets = targetAccounts.filter((account) => getAccountMode(state, account) !== "assessment");
+    if (
+      pendingMode === "assessment"
+      && assessmentTargets.length > 0
+      && !window.confirm(`Begin independent Assessment for ${targetAccounts.length === 1 ? formatAlias(targetAccounts[0].alias) : `${targetAccounts.length} selected patients`}? Step-by-step guidance will be hidden.`)
+    ) {
+      return;
+    }
+    targetIds.forEach((accountId) => setUserMode(accountId, pendingMode));
+    if (pendingMode === "learn") startLearnModule(targetIds);
+    if (pendingMode === "practice") pushPracticeScenario(targetIds);
+    if (pendingMode === "assessment") pushAssessmentScenario(targetIds);
+    if (pendingMode === "free") pushFreeStimulus(targetIds);
+    setModeConfirmText(`Assigned to ${targetAccounts.map((account) => formatAlias(account.alias)).join(", ")}.`);
+    setSessionView("live");
+  }
+
+  if (false) {
+    return (
     <section className={`admin-console ${activeTab === "records" ? "records-view" : ""}`}>
       <header className="admin-top-panel">
         <div>
@@ -726,6 +809,246 @@ export function AdminPanel() {
         )}
       </aside>
     </section>
+    );
+  }
+
+  return (
+    <ClinicianAdminShell
+      state={state}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      sessionView={sessionView}
+      setSessionView={setSessionView}
+      joinedPatients={joinedPatients}
+      sessionAccounts={sessionAccounts}
+      selectedAccountId={selectedAccountId}
+      selectedAccountIds={selectedAccountIds}
+      selectAccount={selectAccount}
+      toggleAssignmentAccount={toggleAssignmentAccount}
+      selectedAssignmentAccounts={selectedAssignmentAccounts}
+      modeTargetAccount={modeTargetAccount}
+      modeTargetParticipant={modeTargetParticipant}
+      currentMode={currentMode}
+      pendingMode={pendingMode}
+      setPendingMode={setPendingMode}
+      createNewSessionPin={createNewSessionPin}
+      newAlias={newAlias}
+      newPin={newPin}
+      setNewAlias={setNewAlias}
+      setNewPin={setNewPin}
+      submitAccount={submitAccount}
+      removeUserAccount={removeUserAccount}
+      removeConnectedPatient={removeConnectedPatient}
+      learnAppId={learnAppId}
+      setLearnAppId={setLearnAppId}
+      scenarioId={scenarioId}
+      setScenarioId={setScenarioId}
+      assessmentScenarioId={assessmentScenarioId}
+      setAssessmentScenarioId={setAssessmentScenarioId}
+      freeStimulusApp={freeStimulusApp}
+      setFreeStimulusApp={setFreeStimulusApp}
+      freeStimulusTitle={freeStimulusTitle}
+      setFreeStimulusTitle={setFreeStimulusTitle}
+      freeStimulusMessage={freeStimulusMessage}
+      setFreeStimulusMessage={setFreeStimulusMessage}
+      freeStimulusEncouragement={freeStimulusEncouragement}
+      setFreeStimulusEncouragement={setFreeStimulusEncouragement}
+      assignActivity={assignActivity}
+      modeConfirmText={modeConfirmText}
+      setPracticeSupport={setPracticeSupport}
+      pushAssessmentPrompt={pushAssessmentPrompt}
+      removeCustomStimulus={removeCustomStimulus}
+      averageTypingLatency={averageTypingLatency}
+      updateAdminNotes={updateAdminNotes}
+      logCue={logCue}
+      checklistScores={selectedChecklistScores}
+      scoredItems={scoredItems}
+      scoreChecklistItem={scoreChecklistItem}
+      confirmEndSession={confirmEndSession}
+    />
+  );
+}
+
+function ClinicianAdminShell({
+  state, activeTab, setActiveTab, sessionView, setSessionView, joinedPatients, sessionAccounts,
+  selectedAccountId, selectedAccountIds, selectAccount, toggleAssignmentAccount, selectedAssignmentAccounts,
+  modeTargetAccount, modeTargetParticipant, currentMode,
+  pendingMode, setPendingMode, createNewSessionPin, newAlias, newPin, setNewAlias, setNewPin,
+  submitAccount, removeUserAccount, removeConnectedPatient, learnAppId, setLearnAppId, scenarioId, setScenarioId,
+  assessmentScenarioId, setAssessmentScenarioId, freeStimulusApp, setFreeStimulusApp,
+  freeStimulusTitle, setFreeStimulusTitle, freeStimulusMessage, setFreeStimulusMessage,
+  freeStimulusEncouragement, setFreeStimulusEncouragement, assignActivity, modeConfirmText,
+  setPracticeSupport, pushAssessmentPrompt, removeCustomStimulus, averageTypingLatency,
+  updateAdminNotes, logCue, checklistScores, scoredItems, scoreChecklistItem, confirmEndSession,
+}) {
+  const connectedAccounts = joinedPatients
+    .map((participant) => sessionAccounts.find((account) => account.id === participant.accountId))
+    .filter(Boolean)
+    .slice(0, state.session.participantLimit);
+  const selectedPatientIndex = Math.max(0, connectedAccounts.findIndex((account) => account.id === modeTargetAccount?.id));
+  const selectedPatientTheme = PATIENT_THEME_PALETTE[selectedPatientIndex % PATIENT_THEME_PALETTE.length];
+
+  return (
+    <section
+      className={`admin-console clinician-admin-shell ${modeTargetAccount ? "patient-theme-active" : ""}`}
+      style={{
+        "--patient-page": selectedPatientTheme.page,
+        "--patient-accent": selectedPatientTheme.accent,
+        "--patient-ink": selectedPatientTheme.ink,
+      }}
+    >
+      <header className="admin-top-panel clinician-admin-header">
+        <div className="admin-brand-block"><span>Daily Digital</span><strong>Clinician workspace</strong></div>
+        <nav className="admin-tabs clinician-primary-nav" aria-label="Clinician workspace">
+          <button type="button" className={activeTab === "patients" ? "active" : ""} onClick={() => setActiveTab("patients")}>Patients &amp; access</button>
+          <button type="button" className={activeTab === "current" ? "active" : ""} onClick={() => setActiveTab("current")}>Current session</button>
+          <button type="button" className={activeTab === "records" ? "active" : ""} onClick={() => setActiveTab("records")}>Records</button>
+        </nav>
+        <div className="session-pin-compact"><span>Session PIN</span><strong>{state.session.pin}</strong></div>
+      </header>
+
+      {activeTab === "patients" ? (
+        <main className="clinician-page">
+          <PageHeading title="Patients & access" description="Create de-identified profiles and help patients join the simulated phone session." />
+          <div className="patient-access-grid">
+            <section className="admin-section join-instructions-card">
+              <span className="section-kicker">Joining instructions</span><h2>Connect to this session</h2>
+              <ol><li>Open the patient join page on the patient device.</li><li>Enter session PIN <strong>{state.session.pin}</strong>.</li><li>Select the patient’s de-identified profile and enter their 4-digit PIN.</li></ol>
+              <div className="join-session-status"><strong>{joinedPatients.length}</strong><span>of {state.session.participantLimit} patients connected</span></div>
+              <button type="button" className="admin-secondary" onClick={createNewSessionPin}>Create new session PIN</button>
+            </section>
+            <AccountSettings state={state} sessionAccounts={sessionAccounts} newAlias={newAlias} newPin={newPin} setNewAlias={setNewAlias} setNewPin={setNewPin} submitAccount={submitAccount} removeUserAccount={removeUserAccount} />
+          </div>
+          <PatientRoster state={state} joinedPatients={joinedPatients} sessionAccounts={sessionAccounts} selectedAccountId={selectedAccountId} selectAccount={selectAccount} removeConnectedPatient={removeConnectedPatient} />
+        </main>
+      ) : null}
+
+      {activeTab === "current" ? (
+        <main className="clinician-page current-session-page">
+          <PageHeading title="Current session" description={joinedPatients.length ? "Guide the session from patient arrival through documentation." : "Start by helping a patient join this session."} />
+          <nav className="session-workflow-tabs clinician-stepper" aria-label="Current session workflow">
+            {[["waiting", "1", "Waiting room"], ["setup", "2", "Setup activity"], ["live", "3", "Live observation"], ["finish", "4", "Finish & document"]].map(([id, number, label]) => (
+              <button key={id} type="button" className={sessionView === id ? "active" : ""} disabled={id !== "waiting" && !modeTargetAccount} onClick={() => setSessionView(id)}><span>{number}</span>{label}</button>
+            ))}
+          </nav>
+
+          {sessionView === "waiting" ? (
+            <section className="session-stage">
+              <StageHeading number="1" title="Waiting room" description="Confirm that the correct patient is connected before assigning an activity." />
+              {joinedPatients.length === 0 ? <div className="clinician-empty-state"><strong>No patients connected yet</strong><p>Ask the patient to enter session PIN <b>{state.session.pin}</b> on the join page.</p><button type="button" className="admin-primary" onClick={() => setActiveTab("patients")}>View joining instructions</button></div> : <><PatientRoster state={state} joinedPatients={joinedPatients} sessionAccounts={sessionAccounts} selectedAccountId={selectedAccountId} selectedAccountIds={selectedAccountIds} toggleAccountSelection={toggleAssignmentAccount} selectAccount={selectAccount} removeConnectedPatient={removeConnectedPatient} compact multiSelect /><div className="stage-primary-action"><button type="button" className="admin-primary" disabled={selectedAssignmentAccounts.length === 0} onClick={() => setSessionView("setup")}>{selectedAssignmentAccounts.length === 0 ? "Select at least one patient" : selectedAssignmentAccounts.length === 1 ? `Set up activity for ${formatAlias(selectedAssignmentAccounts[0].alias)}` : `Set up activity for ${selectedAssignmentAccounts.length} patients`}</button></div></>}
+            </section>
+          ) : null}
+
+          {sessionView !== "waiting" ? <PatientAliasSwitcher accounts={connectedAccounts} participantLimit={state.session.participantLimit} selectedAccountId={modeTargetAccount?.id} selectedAccountIds={selectedAccountIds} selectAccount={selectAccount} toggleAccountSelection={toggleAssignmentAccount} multiSelect={sessionView === "setup"} /> : null}
+
+          {sessionView === "setup" ? <ActivitySetupPanel accounts={selectedAssignmentAccounts} pendingMode={pendingMode} setPendingMode={setPendingMode} learnAppId={learnAppId} setLearnAppId={setLearnAppId} scenarioId={scenarioId} setScenarioId={setScenarioId} assessmentScenarioId={assessmentScenarioId} setAssessmentScenarioId={setAssessmentScenarioId} freeStimulusApp={freeStimulusApp} setFreeStimulusApp={setFreeStimulusApp} freeStimulusTitle={freeStimulusTitle} setFreeStimulusTitle={setFreeStimulusTitle} freeStimulusMessage={freeStimulusMessage} setFreeStimulusMessage={setFreeStimulusMessage} freeStimulusEncouragement={freeStimulusEncouragement} setFreeStimulusEncouragement={setFreeStimulusEncouragement} assignActivity={assignActivity} modeConfirmText={modeConfirmText} /> : null}
+
+          {sessionView === "live" ? (
+            <section className="session-stage live-observation-stage">
+              <StageHeading number="3" title="Live observation" description="Observe first, then use the least assistance required. Objective events and clinician notes remain separate." action={<button type="button" className="admin-secondary" onClick={() => setSessionView("finish")}>Finish session</button>} />
+              {!modeTargetAccount ? <div className="clinician-empty-state"><strong>Select a connected patient first</strong><button type="button" className="admin-primary" onClick={() => setSessionView("waiting")}>Return to waiting room</button></div> : <div className="live-observation-grid"><div className="live-primary-column"><EvaluationPanel state={state} selectedAccount={modeTargetAccount} setPracticeSupport={setPracticeSupport} pushAssessmentPrompt={pushAssessmentPrompt} removeCustomStimulus={removeCustomStimulus} /><ClinicianObservationTools state={state} updateAdminNotes={updateAdminNotes} logCue={logCue} /></div><div className="live-evidence-column"><SessionTimeline state={state} selectedAccount={modeTargetAccount} /><LiveActivityEvidence state={state} averageTypingLatency={averageTypingLatency} selectedAccount={modeTargetAccount} /></div></div>}
+            </section>
+          ) : null}
+
+          {sessionView === "finish" ? <FinishDocumentationPanel state={state} account={modeTargetAccount} checklistScores={checklistScores} scoredItems={scoredItems} scoreChecklistItem={scoreChecklistItem} updateAdminNotes={updateAdminNotes} confirmEndSession={confirmEndSession} setSessionView={setSessionView} /> : null}
+        </main>
+      ) : null}
+
+      {activeTab === "records" ? <main className="clinician-page records-page"><PageHeading title="Records" description="Review patient progress, individual attempts, and supporting functional-cognition evidence." /><PastRecords records={state.session.records} /></main> : null}
+    </section>
+  );
+}
+
+function PageHeading({ title, description }) {
+  return <header className="clinician-page-heading"><div><h1>{title}</h1><p>{description}</p></div></header>;
+}
+
+function StageHeading({ number, title, description, action = null }) {
+  return <div className="stage-heading"><div><span>Step {number}</span><h2>{title}</h2><p>{description}</p></div>{action}</div>;
+}
+
+function PatientAliasSwitcher({ accounts, participantLimit, selectedAccountId, selectedAccountIds = [], selectAccount, toggleAccountSelection, multiSelect = false }) {
+  const slots = Array.from({ length: participantLimit }, (_, index) => accounts[index] || null);
+  return (
+    <nav className="patient-alias-switcher" aria-label="Switch selected patient">
+      {slots.map((account, index) => {
+        const theme = PATIENT_THEME_PALETTE[index % PATIENT_THEME_PALETTE.length];
+        const selected = account && (multiSelect ? selectedAccountIds.includes(account.id) : account.id === selectedAccountId);
+        return (
+          <button
+            key={account?.id || `empty-patient-${index}`}
+            type="button"
+            className={selected ? "selected" : ""}
+            style={{ "--tile-color": theme.tile, "--tile-accent": theme.accent, "--tile-ink": theme.ink }}
+            onClick={() => account && (multiSelect ? toggleAccountSelection(account.id) : selectAccount(account.id))}
+            disabled={!account}
+            aria-pressed={account ? selected : undefined}
+            aria-label={account ? `${account.alias}${selected ? ", selected for assignment" : multiSelect ? ", not selected for assignment" : ""}` : `Patient slot ${index + 1}, waiting for connection`}
+          >
+            {account?.alias || ""}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function PatientRoster({ state, joinedPatients, sessionAccounts, selectedAccountId, selectedAccountIds = [], selectAccount, toggleAccountSelection, removeConnectedPatient, compact = false, multiSelect = false }) {
+  return <section className={`admin-section patient-roster ${compact ? "compact" : ""}`}><div className="roster-heading"><div><span className="section-kicker">Connected patients</span><h2>{joinedPatients.length ? `${joinedPatients.length} connected` : "No patients connected"}</h2>{multiSelect ? <p className="admin-muted">Select every patient who should receive the same activity.</p> : null}</div><span className="capacity-label">{joinedPatients.length}/{state.session.participantLimit} places used</span></div>{joinedPatients.length === 0 ? <p className="admin-muted">Connected patients will appear here automatically.</p> : <div className="patient-roster-list">{joinedPatients.map((participant) => { const account = sessionAccounts.find((item) => item.id === participant.accountId); if (!account) return null; const selected = multiSelect ? selectedAccountIds.includes(account.id) : account.id === selectedAccountId; return <article key={account.id} className={selected ? "selected" : ""}><button type="button" className="patient-roster-select" onClick={() => multiSelect ? toggleAccountSelection(account.id) : selectAccount(account.id)} aria-pressed={selected}><span className="patient-avatar">{formatAlias(account.alias).slice(0, 1)}</span><span className="patient-roster-identity"><strong>{formatAlias(account.alias)}</strong><em>{getParticipantCode(account)} · {participant.currentApp ? `In ${participant.currentApp}` : "Waiting"}</em><span className={`connection-status ${participant.mode || "practice"}`}>{participant.mode || "practice"}</span></span><b>{selected ? "Selected" : "Select"}</b></button><button type="button" className="patient-roster-remove" onClick={() => removeConnectedPatient(account)} aria-label={`Remove ${formatAlias(account.alias)} from connected patients`}>Remove</button></article>; })}</div>}</section>;
+}
+
+function ActivitySetupPanel({ accounts, pendingMode, setPendingMode, learnAppId, setLearnAppId, scenarioId, setScenarioId, assessmentScenarioId, setAssessmentScenarioId, freeStimulusApp, setFreeStimulusApp, freeStimulusTitle, setFreeStimulusTitle, freeStimulusMessage, setFreeStimulusMessage, freeStimulusEncouragement, setFreeStimulusEncouragement, assignActivity, modeConfirmText }) {
+  const selectedLearnApp = LEARN_APP_CATALOG.find((app) => app.id === learnAppId) || LEARN_APP_CATALOG[0];
+  const activeScenarioId = pendingMode === "assessment" ? assessmentScenarioId : scenarioId;
+  const selectedScenario = SCENARIO_LIBRARY.find((scenario) => scenario.id === activeScenarioId) || SCENARIO_LIBRARY[0];
+  const purposeDescriptions = { learn: "Teach with guidance", practice: "Practise with graded help", assessment: "Observe independently", free: "Explore without a structured task" };
+  return (
+    <section className="session-stage activity-setup-stage">
+      <StageHeading number="2" title="Setup activity" description="Choose the clinical purpose and activity, then review one clear assignment before starting." />
+      {accounts.length === 0 ? <div className="clinician-empty-state"><strong>Select at least one connected patient before assigning an activity.</strong></div> : (
+        <div className="activity-composer">
+          <section className="admin-section">
+            <span className="section-kicker">1. Clinical purpose</span>
+            <div className="mode-control large clinician-mode-control">{SESSION_MODES.map((mode) => <button key={mode.id} type="button" className={pendingMode === mode.id ? "active" : ""} onClick={() => setPendingMode(mode.id)}><strong>{mode.label}</strong><span>{purposeDescriptions[mode.id]}</span></button>)}</div>
+            <ModeInterface mode={pendingMode} />
+          </section>
+          <section className="admin-section activity-choice-card">
+            <span className="section-kicker">2. Activity</span>
+            {pendingMode === "learn" ? <><label><span>Teaching module</span><select value={learnAppId} onChange={(event) => setLearnAppId(event.target.value)}>{LEARN_APP_CATALOG.map((app) => <option key={app.id} value={app.id}>{app.label}</option>)}</select></label><div className="assignment-preview"><strong>{selectedLearnApp.label}</strong><p>{selectedLearnApp.purpose}</p></div></> : null}
+            {pendingMode === "practice" || pendingMode === "assessment" ? <><label><span>Activity</span><select value={activeScenarioId} onChange={(event) => pendingMode === "assessment" ? setAssessmentScenarioId(event.target.value) : setScenarioId(event.target.value)}>{SCENARIO_LIBRARY.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.title}</option>)}</select></label><div className="assignment-preview"><strong>{selectedScenario.title}</strong><span>{selectedScenario.complexity} · {selectedScenario.apps.map((appId) => APP_CATALOG.find((app) => app.id === appId)?.label || appId).join(", ")}</span><p>{selectedScenario.description}</p><em>{selectedScenario.successCriteria.join(" → ")}</em></div></> : null}
+            {pendingMode === "free" ? <div className="free-activity-fields"><label><span>App</span><select value={freeStimulusApp} onChange={(event) => setFreeStimulusApp(event.target.value)}><option value="whatsapp">WhatsApp</option><option value="sms">Messages</option></select></label><label><span>Sender or title</span><input value={freeStimulusTitle} onChange={(event) => setFreeStimulusTitle(event.target.value)} /></label><label><span>Message</span><textarea rows={3} value={freeStimulusMessage} onChange={(event) => setFreeStimulusMessage(event.target.value)} /></label><label><span>Patient instruction</span><textarea rows={3} value={freeStimulusEncouragement} onChange={(event) => setFreeStimulusEncouragement(event.target.value)} /></label></div> : null}
+          </section>
+          <section className="assignment-review-card"><div><span>3. Review assignment</span><strong>{accounts.length === 1 ? formatAlias(accounts[0].alias) : `${accounts.length} selected patients`} will begin {SESSION_MODES.find((mode) => mode.id === pendingMode)?.label || pendingMode}</strong><p className="assignment-target-aliases">{accounts.map((account) => formatAlias(account.alias)).join(", ")}</p><p>{pendingMode === "learn" ? selectedLearnApp.label : pendingMode === "free" ? `${freeStimulusApp === "sms" ? "Messages" : "WhatsApp"}: ${freeStimulusTitle}` : selectedScenario.title}</p></div><button type="button" className="admin-primary" disabled={(pendingMode === "free" && !freeStimulusMessage.trim()) || accounts.length === 0} onClick={assignActivity}>{accounts.length === 1 ? "Start activity" : `Start activity for ${accounts.length}`}</button></section>
+          {modeConfirmText ? <p className="mode-confirm-text">{modeConfirmText}</p> : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ClinicianObservationTools({ state, updateAdminNotes, logCue }) {
+  return (
+    <section className="admin-section clinician-observation-tools">
+      <span className="section-kicker">Clinician observations</span><h3>Notes and cues</h3>
+      <p className="admin-muted">Record what you observed. Cue buttons log assistance already given; they do not interrupt the patient’s screen.</p>
+      <label><span>Session notes</span><textarea rows={5} value={state.adminNotes} onChange={(event) => updateAdminNotes(event.target.value)} placeholder="Record strategies, errors, awareness, and clinically relevant context…" /></label>
+      <div className="cue-button-list">{QUICK_CUES.map((cue) => <button key={cue} type="button" onClick={() => logCue(cue)}>{cue}</button>)}</div>
+      {state.cueLog?.length ? <p className="cue-count-summary">{state.cueLog.length} cue{state.cueLog.length === 1 ? "" : "s"} recorded this session.</p> : null}
+    </section>
+  );
+}
+
+function FinishDocumentationPanel({ state, account, checklistScores, scoredItems, scoreChecklistItem, updateAdminNotes, confirmEndSession, setSessionView }) {
+  return (
+    <section className="session-stage finish-documentation-stage">
+      <StageHeading number="4" title="Finish & document" description="Review objective evidence, complete clinician ratings, and save the session record." />
+      {!account ? <div className="clinician-empty-state"><strong>Select a patient before completing documentation.</strong><button type="button" className="admin-primary" onClick={() => setSessionView("waiting")}>Choose patient</button></div> : (
+        <div className="finish-grid">
+          <section className="admin-section"><span className="section-kicker">Clinician ratings</span><h3>Functional task checklist</h3><p className="admin-muted">Rate observed performance using the clinical anchors. These ratings support interpretation and are not diagnostic scores.</p><div className="clinician-checklist">{CHECKLIST_ITEMS.map((item) => <fieldset key={item.id}><legend><strong>{item.label}</strong><span>{item.domain}</span><p>{item.anchor}</p></legend><div>{[0, 1, 2, 3, 4].map((score) => <label key={score} className={checklistScores[item.id] === score ? "selected" : ""}><input type="radio" name={`score-${item.id}`} checked={checklistScores[item.id] === score} onChange={() => scoreChecklistItem(item.id, score, account.id)} /><strong>{score}</strong><span>{SCORE_LABELS[score]}</span></label>)}</div></fieldset>)}</div></section>
+          <aside><section className="admin-section finish-summary-card"><span className="section-kicker">Completion</span><h3>{formatAlias(account.alias)}</h3><p><strong>{scoredItems}/{CHECKLIST_ITEMS.length}</strong> checklist items rated</p><p><strong>{state.cueLog?.length || 0}</strong> clinician cues recorded</p><p><strong>{state.session.completedAt ? "Finished" : "In progress"}</strong> session status</p></section><section className="admin-section"><label><span>Final clinical note</span><textarea rows={8} value={state.adminNotes} onChange={(event) => updateAdminNotes(event.target.value)} placeholder="Summarise performance, support required, and relevant context…" /></label></section><button type="button" className="admin-danger finish-session-button" disabled={Boolean(state.session.completedAt)} onClick={confirmEndSession}>{state.session.completedAt ? "Session finished and saved" : "Finish session and save record"}</button><button type="button" className="admin-secondary" onClick={() => setSessionView("live")}>Return to live observation</button></aside>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -754,7 +1077,7 @@ function AccountSettings({ state, sessionAccounts, newAlias, newPin, setNewAlias
 
   return (
     <section className="admin-section">
-      <h3>De-identified User Accounts</h3>
+      <h3>De-identified patient profiles</h3>
       <div className="account-grid">
         {sessionAccounts.map((account) => (
           <div key={account.id}>
@@ -766,9 +1089,9 @@ function AccountSettings({ state, sessionAccounts, newAlias, newPin, setNewAlias
         ))}
       </div>
       <form className="admin-inline-form" onSubmit={submitAccount}>
-        <input value={newAlias} onChange={(event) => setNewAlias(event.target.value)} placeholder="Alias, e.g. Calm Panda" />
+        <input value={newAlias} onChange={(event) => setNewAlias(event.target.value)} placeholder="Patient alias, e.g. Calm Panda" />
         <input value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="4-digit PIN" inputMode="numeric" />
-        <button type="submit">Add</button>
+        <button type="submit">Add profile</button>
       </form>
     </section>
   );

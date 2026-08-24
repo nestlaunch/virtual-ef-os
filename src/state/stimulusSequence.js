@@ -2,6 +2,8 @@ import { formalThreads, whatsappThreads } from "./seedData.js";
 import { SCENARIO_LIBRARY } from "./v2Assessment.js";
 import { getCurrentAssignment, getCurrentUserMode, getStimulusStartAt } from "./sessionLifecycle.js";
 
+export const ASSESSMENT_NOTIFICATION_LEAD_IN_MS = 5000;
+
 export const STIMULUS_SEQUENCE = [
   {
     id: "sms-doctor",
@@ -64,10 +66,10 @@ function previewFor(stimulus) {
   return thread?.messages?.at(-1)?.text || "";
 }
 
-export function getAvailableStimuli(startedAt, now = Date.now()) {
+export function getAvailableStimuli(startedAt, now = Date.now(), delayOffsetMs = 0) {
   const elapsed = Math.max(0, now - (startedAt || now));
   return STIMULUS_SEQUENCE
-    .filter((stimulus) => elapsed >= stimulus.delayMs)
+    .filter((stimulus) => elapsed >= stimulus.delayMs + Math.max(0, delayOffsetMs))
     .map((stimulus) => ({ ...stimulus, preview: previewFor(stimulus) }));
 }
 
@@ -99,7 +101,7 @@ export function getAvailableStimuliForState(state, now = Date.now()) {
   const accountId = state.session.currentUserId;
   const mode = getCurrentUserMode(state.session, accountId);
   const scenario = getScenarioForAssignment(state.session, accountId, mode);
-  const startedAt = getStimulusStartAt(state.session, accountId, mode);
+  const assignedAt = getStimulusStartAt(state.session, accountId, mode);
   const custom = customStimuliFor(state.session, accountId, mode, now);
 
   if (mode === "free") {
@@ -123,8 +125,17 @@ export function getAvailableStimuliForState(state, now = Date.now()) {
     return [];
   }
 
+  const assessmentStartedAt = mode === "assessment"
+    ? state.assessmentMetrics?.byAccount?.[accountId]?.startedByUserAt
+    : null;
+  if (mode === "assessment" && !assessmentStartedAt) {
+    return [];
+  }
+  const startedAt = assessmentStartedAt || assignedAt;
+  const notificationLeadInMs = mode === "assessment" ? ASSESSMENT_NOTIFICATION_LEAD_IN_MS : 0;
+
   return [
-    ...getAvailableStimuli(startedAt, now).filter((stimulus) => stimulusMatchesScenario(stimulus, scenario)),
+    ...getAvailableStimuli(startedAt, now, notificationLeadInMs).filter((stimulus) => stimulusMatchesScenario(stimulus, scenario)),
     ...custom,
   ];
 }

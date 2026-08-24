@@ -100,6 +100,24 @@ function secureHashEqual(left, right) {
   return difference === 0;
 }
 
+function getBearerToken(request) {
+  const authorization = request.headers.get("authorization") || "";
+  return authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : "";
+}
+
+function isAdminAuthorized(request, env) {
+  const expected = String(env.ADMIN_API_KEY || "");
+  const provided = getBearerToken(request);
+  return Boolean(expected && provided && secureHashEqual(provided, expected));
+}
+
+function requireAdmin(request, env) {
+  if (!env.ADMIN_API_KEY) {
+    return error("Clinician access is not configured.", 503);
+  }
+  return isAdminAuthorized(request, env) ? null : error("Clinician authorization required.", 401);
+}
+
 function sessionStub(env, pin) {
   const id = env.SESSION_DO.idFromName(`${SESSION_NAMESPACE_VERSION}:${pin}`);
   return env.SESSION_DO.get(id);
@@ -322,7 +340,7 @@ async function createAccount(env, body) {
     .bind(alias)
     .first();
   if (existing) {
-    return json({ ok: true, account: { id: existing.id, alias, participantCode: existing.participant_code }, existing: true });
+    return error("This alias has already been created.", 409);
   }
   const requestedId = String(body.id || "").trim();
   const accountId = requestedId && /^[A-Za-z0-9_-]{3,80}$/.test(requestedId) ? requestedId : randomId("acct");
@@ -503,7 +521,7 @@ async function handleDbSessionRoute(request, env, pin, action) {
       const protectedSnapshot = protectSessionControls(
         nextSnapshot,
         snapshot,
-        body.writerRole || "patient",
+        isAdminAuthorized(request, env) ? "admin" : "patient",
         body.writerAccountId || null,
       );
       const saved = await putDbSnapshot(env, pin, row.id, protectedSnapshot);
@@ -612,6 +630,10 @@ async function handleDbSessionRoute(request, env, pin, action) {
   }
 
   if (action === "end" && request.method === "POST") {
+    const unauthorized = requireAdmin(request, env);
+    if (unauthorized) {
+      return unauthorized;
+    }
     await env.DB.prepare("UPDATE sessions SET status = 'ended', ended_at = unixepoch() WHERE id = ?")
       .bind(row.id)
       .run();
@@ -630,6 +652,12 @@ async function saveRecord(request, env) {
   const recordId = body.id || randomId("rec");
   if (!body.accountId || !body.mode) {
     return error("accountId and mode are required.");
+  }
+  if (!isAdminAuthorized(request, env)) {
+    const account = await authenticateAccount(env, String(body.alias || "").trim(), String(body.pin || "").trim());
+    if (!account || account.id !== body.accountId) {
+      return error("Account authorization required.", 401);
+    }
   }
   await env.DB.prepare(
     `INSERT OR REPLACE INTO records (
@@ -712,19 +740,29 @@ async function handleApi(request, env) {
   if (request.method === "GET" && parts[0] === "health") {
     return json({ ok: true, name: "daily-digital-api" });
   }
+  if (request.method === "GET" && parts[0] === "admin" && parts[1] === "verify") {
+    const unauthorized = requireAdmin(request, env);
+    return unauthorized || json({ ok: true });
+  }
   if (request.method === "GET" && parts[0] === "accounts" && parts.length === 1) {
+    const unauthorized = requireAdmin(request, env);
+    if (unauthorized) return unauthorized;
     return listAccounts(env);
   }
   if (request.method === "POST" && parts[0] === "accounts" && parts.length === 1) {
     return createAccount(env, await readJson(request));
   }
   if (request.method === "DELETE" && parts[0] === "accounts" && parts[1]) {
+    const unauthorized = requireAdmin(request, env);
+    if (unauthorized) return unauthorized;
     return removeAccount(env, parts[1]);
   }
   if (request.method === "POST" && parts[0] === "login") {
     return loginAccount(env, await readJson(request));
   }
   if (request.method === "POST" && parts[0] === "sessions" && parts.length === 1) {
+    const unauthorized = requireAdmin(request, env);
+    if (unauthorized) return unauthorized;
     return createSession(request, env);
   }
   if (request.method === "POST" && parts[0] === "sessions" && parts[1] && parts[2] === "join") {
@@ -740,6 +778,8 @@ async function handleApi(request, env) {
     return saveRecord(request, env);
   }
   if (request.method === "GET" && parts[0] === "accounts" && parts[1] && parts[2] === "report") {
+    const unauthorized = requireAdmin(request, env);
+    if (unauthorized) return unauthorized;
     return getAccountReport(env, parts[1]);
   }
   return error("Route not found.", 404);
@@ -844,7 +884,7 @@ export class SessionCoordinator {
         const protectedSnapshot = protectSessionControls(
           snapshot,
           currentSnapshot,
-          body.writerRole || "patient",
+          isAdminAuthorized(request, this.env) ? "admin" : "patient",
           body.writerAccountId || null,
         );
         const nextSnapshot = {
@@ -938,6 +978,10 @@ export class SessionCoordinator {
     }
 
     if (action === "push" && request.method === "POST") {
+      const unauthorized = requireAdmin(request, this.env);
+      if (unauthorized) {
+        return unauthorized;
+      }
       if (!body.targetId || !body.mode) {
         return error("targetId and mode are required.");
       }
@@ -1008,6 +1052,10 @@ export class SessionCoordinator {
     }
 
     if (action === "end" && request.method === "POST") {
+      const unauthorized = requireAdmin(request, this.env);
+      if (unauthorized) {
+        return unauthorized;
+      }
       session.status = "ended";
       session.endedAt = Date.now();
       session.updatedAt = Date.now();

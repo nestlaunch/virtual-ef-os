@@ -2,6 +2,7 @@ import { getStoredLiveStateSnapshot, mergeLiveStateSnapshot } from "./sessionSto
 
 const API_BASE_URL = String(import.meta.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 const SYNC_STATE_KEY = "daily-digital-cloud-sync-v2";
+const ADMIN_KEY_STORAGE = "daily-digital-admin-key-v1";
 const SYNC_INTERVAL_MS = 2500;
 
 let lastSyncAt = 0;
@@ -25,11 +26,35 @@ function writeSyncState(syncState) {
   }
 }
 
+function isAdminClient() {
+  return typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/admin";
+}
+
+export function getStoredCloudAdminKey() {
+  try {
+    return window.sessionStorage.getItem(ADMIN_KEY_STORAGE) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setStoredCloudAdminKey(value) {
+  try {
+    const key = String(value || "").trim();
+    if (key) window.sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
+    else window.sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+  } catch {
+    // Session-only clinician access can still be retried after storage failures.
+  }
+}
+
 async function apiFetch(path, options = {}) {
+  const adminKey = isAdminClient() ? getStoredCloudAdminKey() : "";
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
       "content-type": "application/json",
+      ...(adminKey ? { authorization: `Bearer ${adminKey}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -49,6 +74,18 @@ async function apiFetch(path, options = {}) {
 
 export function getCloudApiBaseUrl() {
   return API_BASE_URL;
+}
+
+export async function verifyCloudAdminKey(value) {
+  const key = String(value || "").trim();
+  if (!API_BASE_URL || !key) return false;
+  try {
+    await apiFetch("/api/admin/verify", { headers: { authorization: `Bearer ${key}` } });
+    setStoredCloudAdminKey(key);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function apiFetchOptional(path, options = {}) {
@@ -96,6 +133,7 @@ export function getRecordPayload(record, participant, sessionId) {
 
 function shouldUseCloudSync() {
   return typeof window !== "undefined"
+    && Boolean(API_BASE_URL)
     && typeof fetch === "function"
     && window.location.protocol !== "file:"
     && Date.now() > disabledUntil;
@@ -305,14 +343,14 @@ export async function prepareCloudJoin(pin, alias, participantPin, state, authen
 async function performCloudSync(state) {
   lastSyncAt = Date.now();
   const syncState = readSyncState();
-  const isAdminClient = window.location.pathname.replace(/\/+$/, "") === "/admin";
+  const adminClient = isAdminClient();
   const isJoinedPatient = Boolean(state.session.joined && state.session.currentUserId);
-  if (!isAdminClient && !isJoinedPatient) {
+  if (!adminClient && !isJoinedPatient) {
     return null;
   }
   try {
     const accounts = state.session.userAccounts || [];
-    for (const account of isAdminClient ? accounts : []) {
+    for (const account of adminClient ? accounts : []) {
       if (!account?.id || !account?.alias || !account?.pin || syncState[`account:${account.id}`]) {
         continue;
       }
@@ -324,7 +362,7 @@ async function performCloudSync(state) {
     }
 
     const pin = state.session.pin;
-    if (isAdminClient && pin && /^[A-Z0-9]{6}$/.test(pin)) {
+    if (adminClient && pin && /^[A-Z0-9]{6}$/.test(pin)) {
       const payload = await apiFetch("/api/sessions", {
         method: "POST",
         body: JSON.stringify({ pin }),
@@ -353,7 +391,7 @@ async function performCloudSync(state) {
     }
 
     const removedAccountIds = state.session.removedAccountIds || [];
-    for (const accountId of isAdminClient ? removedAccountIds : []) {
+    for (const accountId of adminClient ? removedAccountIds : []) {
       if (!accountId || syncState[`removed:${accountId}`]) {
         continue;
       }
@@ -367,16 +405,17 @@ async function performCloudSync(state) {
         if (!participant.accountId || syncState[`record:${payload.id}`]) {
           continue;
         }
+        const recordAccount = accounts.find((account) => account.id === participant.accountId);
         await apiFetch("/api/records", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, alias: recordAccount?.alias || "", pin: recordAccount?.pin || "" }),
         });
         syncState[`record:${payload.id}`] = Date.now();
       }
     }
 
     if (pin && /^[A-Z0-9]{6}$/.test(pin)) {
-      const cloudAccounts = await listCloudAccounts();
+      const cloudAccounts = adminClient ? await listCloudAccounts() : [];
       const localSnapshot = getStoredLiveStateSnapshot(state);
       const localSnapshotWithAccounts = {
         ...localSnapshot,
@@ -393,14 +432,14 @@ async function performCloudSync(state) {
         state.session.currentUserId,
       );
       const mergedSnapshot = mergeLiveStateSnapshot(publishSnapshot, cloudSnapshot);
-      const outboundSnapshot = isAdminClient
+      const outboundSnapshot = adminClient
         ? applyAdminControlledSessionFields(mergedSnapshot, publishSnapshot)
         : mergedSnapshot;
       await apiFetch(`/api/sessions/${pin}/snapshot`, {
         method: "PUT",
         body: JSON.stringify({
           snapshot: outboundSnapshot,
-          writerRole: isAdminClient ? "admin" : "patient",
+          writerRole: adminClient ? "admin" : "patient",
           writerAccountId: state.session.currentUserId || null,
         }),
       });

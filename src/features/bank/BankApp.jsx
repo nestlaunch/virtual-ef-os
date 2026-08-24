@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 
 const ACCOUNTS = [
@@ -17,7 +17,7 @@ const FLOW_STEPS = [
   "Log in only through the official app.",
   "Choose account and payee.",
   "Check amount and recipient carefully.",
-  "Approve only if the request is expected and safe.",
+  "Submit only after reviewing the payment details.",
 ];
 
 const SCAM_RED_FLAGS = [
@@ -40,11 +40,11 @@ function getPayee(id) {
 }
 
 export function BankApp() {
-  const { state, openApp, requestSingpassTransaction, clearSingpassTransaction } = useVirtualOS();
+  const { state, openApp, requestBankLogin, clearSingpassTransaction, signOutBank } = useVirtualOS();
   const effectiveMode = state.session.currentUserId
     ? state.session.userModes[state.session.currentUserId] || state.session.mode
     : state.session.mode;
-  const [screen, setScreen] = useState("login");
+  const [screen, setScreen] = useState(state.bankAuth?.status === "authenticated" ? "home" : "login");
   const [transfer, setTransfer] = useState({
     from: ACCOUNTS[0].id,
     payee: "",
@@ -57,7 +57,6 @@ export function BankApp() {
 
   const selectedAccount = ACCOUNTS.find((account) => account.id === transfer.from) ?? ACCOUNTS[0];
   const selectedPayee = getPayee(transfer.payee);
-  const singpassTransaction = state.singpass?.transaction;
   const numericAmount = Number(transfer.amount);
   const isScamTransfer = Boolean(selectedPayee?.scam);
   const isLearnMode = effectiveMode === "learn";
@@ -72,6 +71,13 @@ export function BankApp() {
     && (!isLearnMode || learnPaymentReady)
   );
   const availablePayees = isLearnMode ? PAYEES.filter((payee) => !payee.scam) : PAYEES;
+
+  useEffect(() => {
+    if (state.bankAuth?.status === "authenticated") {
+      setScreen("home");
+      if (state.singpass?.transaction?.source === "bank-login") clearSingpassTransaction();
+    }
+  }, [state.bankAuth?.status, state.singpass?.transaction?.source, clearSingpassTransaction]);
 
   const flowProgress = useMemo(() => {
     return [
@@ -124,40 +130,13 @@ export function BankApp() {
     setScreen("amount");
   }
 
-  function requestSingpassApproval() {
-    requestSingpassTransaction({
-      source: "bank",
-      payee: selectedPayee?.name,
-      amount: transfer.amount,
-      purpose: transfer.note || "Clinic bill",
-      reference: "PB-CLINIC-2500",
-    });
+  function completePayment() {
+    setTokenApproved(true);
     window.dispatchEvent(new CustomEvent("virtual-os-learn-bank-confirmed", {
       detail: { payee: selectedPayee?.name, amount: transfer.amount },
     }));
-    openApp("singpass");
-  }
-
-  if (singpassTransaction?.source === "bank" && ["approved", "rejected"].includes(singpassTransaction.status)) {
-    return (
-      <div className="bank-app">
-        <BankHeader onHome={() => setScreen("home")} />
-        <main className="bank-content">
-          <ResultScreen
-            title={singpassTransaction.status === "approved" ? "Payment authorised" : "Payment stopped"}
-            message={
-              singpassTransaction.status === "approved"
-                ? `Singpass approved ${maskAmount(singpassTransaction.amount)} to ${singpassTransaction.payee}.`
-                : "Singpass rejected the payment request. No simulated payment was made."
-            }
-            onDone={() => {
-              clearSingpassTransaction();
-              setScreen("home");
-            }}
-          />
-        </main>
-      </div>
-    );
+    window.dispatchEvent(new CustomEvent("virtual-os-learn-bank-payment", { detail: { payee: selectedPayee?.name, amount: transfer.amount } }));
+    setScreen("success");
   }
 
   if (screen === "login") {
@@ -170,8 +149,8 @@ export function BankApp() {
           </div>
           <h2>Welcome back</h2>
           <p>This is a simulated banking app for learning. It does not connect to a real bank or move real money.</p>
-          <button type="button" className="bank-primary-btn" onClick={() => setScreen("home")}>
-            Log in with Digital Token
+          <button type="button" className="bank-primary-btn" onClick={() => { requestBankLogin(); openApp("singpass"); }}>
+            Log in with Singpass
           </button>
           {!isLearnMode ? (
             <button type="button" className="bank-ghost-btn" onClick={startScamScenario}>
@@ -459,7 +438,7 @@ export function BankApp() {
               transfer={transfer}
               isScamTransfer={isScamTransfer}
               onBack={() => setScreen("amount")}
-              onConfirm={requestSingpassApproval}
+              onConfirm={completePayment}
             />
           ) : null}
           {screen === "token" ? (
@@ -482,7 +461,7 @@ export function BankApp() {
               message={
                 isScamTransfer
                   ? "In real life, this would be unsafe. The safer action is to cancel, report, and verify through official channels."
-                  : "You checked the payee, amount, and purpose before approving the simulated transfer."
+                  : "Payment completed. You checked the payee, amount, and purpose before submitting the simulated transfer."
               }
               onDone={() => setScreen("home")}
             />
@@ -503,6 +482,7 @@ export function BankApp() {
     <div className="bank-app">
       <BankHeader onHome={() => setScreen("home")} />
       <main className="bank-content">
+        <button type="button" className="bank-signout-btn" onClick={() => { signOutBank(); setScreen("login"); }}>Sign out</button>
         <section className="bank-balance-card">
           <span>Total balance</span>
           <strong>{formatMoney(ACCOUNTS.reduce((sum, account) => sum + account.balance, 0))}</strong>

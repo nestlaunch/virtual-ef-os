@@ -112,6 +112,36 @@ const initialState = {
   singpass: storedLiveState?.singpass || {
     transaction: null,
   },
+  bankAuth: storedLiveState?.bankAuth || {
+    status: "signed-out",
+    authenticatedAt: null,
+  },
+  mailAccount: storedLiveState?.mailAccount || {
+    created: false,
+    signedIn: false,
+    profile: null,
+    password: "",
+  },
+  mail: storedLiveState?.mail || {
+    inbox: [],
+    sent: [],
+    drafts: [],
+  },
+  calculator: storedLiveState?.calculator || {
+    expression: "",
+    display: "0",
+    history: [],
+  },
+  connectivity: storedLiveState?.connectivity || {
+    view: "overview",
+    wifiEnabled: false,
+    mobileDataEnabled: true,
+    airplaneMode: false,
+    dataSaverEnabled: false,
+    roamingEnabled: false,
+    connectedNetwork: null,
+    wifiErrorCount: 0,
+  },
   metrics: storedLiveState?.metrics || {
     omissionErrors: rigidAppointments.length,
     perseveration: 0,
@@ -444,10 +474,19 @@ function reducer(state, action) {
           now,
         });
         if (assignmentResult) {
+          const learnStartApp = app === "connectivity" ? "home" : app;
           next = {
             ...next,
-            currentApp: action.currentApp || app,
-            appHistory: action.currentApp && action.currentApp !== "home" ? ["home", action.currentApp] : app === "home" ? [] : ["home"],
+            connectivity: app === "connectivity" ? {
+              ...next.connectivity,
+              view: "overview",
+              wifiEnabled: false,
+              mobileDataEnabled: false,
+              airplaneMode: false,
+              connectedNetwork: null,
+            } : next.connectivity,
+            currentApp: action.currentApp || learnStartApp,
+            appHistory: action.currentApp && action.currentApp !== "home" ? ["home", action.currentApp] : learnStartApp === "home" ? [] : ["home"],
             session: assignmentResult.session,
             learnMetrics: {
               ...learnMetrics,
@@ -567,6 +606,90 @@ function reducer(state, action) {
       };
       return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "stimulus_dismissed", stimulusId: action.stimulusId }) });
     }
+    case "SET_CONNECTIVITY_VIEW": {
+      const next = { ...state, connectivity: { ...state.connectivity, view: action.view || "overview" } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "connectivity_view", view: next.connectivity.view }) });
+    }
+    case "SET_CONNECTIVITY_SETTING": {
+      if (!action.key) return state;
+      let connectivity = { ...state.connectivity, [action.key]: action.value };
+      if (action.key === "airplaneMode" && action.value) {
+        connectivity = { ...connectivity, wifiEnabled: false, mobileDataEnabled: false, connectedNetwork: null };
+      }
+      if (action.key === "wifiEnabled" && !action.value) {
+        connectivity.connectedNetwork = null;
+      }
+      if (action.key === "mobileDataEnabled" && state.connectivity.airplaneMode && action.value) {
+        connectivity.airplaneMode = false;
+      }
+      const next = { ...state, connectivity };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "connectivity_setting", setting: action.key, value: action.value }) });
+    }
+    case "CONNECT_WIFI": {
+      if (!action.network) return state;
+      const next = { ...state, connectivity: { ...state.connectivity, wifiEnabled: true, airplaneMode: false, connectedNetwork: action.network } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "wifi_connected", networkId: action.network.id, trusted: Boolean(action.network.trusted) }) });
+    }
+    case "DISCONNECT_WIFI": {
+      const networkId = state.connectivity.connectedNetwork?.id || null;
+      const next = { ...state, connectivity: { ...state.connectivity, connectedNetwork: null } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "wifi_disconnected", networkId }) });
+    }
+    case "CREATE_MAIL_ACCOUNT": {
+      const profile = { name: action.name, email: action.email, recovery: action.recovery || "" };
+      const welcome = {
+        id: `mail-welcome-${Date.now()}`,
+        from: "Daily Mail Team <welcome@dailymail.test>",
+        subject: "Welcome to Daily Mail",
+        preview: "Your fictional training inbox is ready.",
+        body: "Welcome. This account exists only inside the Daily Digital training simulator. Never enter real credentials here.",
+        receivedAt: Date.now(),
+        unread: true,
+      };
+      const next = {
+        ...state,
+        mailAccount: { created: true, signedIn: true, profile, password: action.password || "" },
+        mail: { ...state.mail, inbox: [welcome, ...(state.mail?.inbox || [])] },
+      };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "mail_account_created" }) });
+    }
+    case "SIGN_IN_MAIL": {
+      const ok = state.mailAccount.created && action.email === state.mailAccount.profile?.email && action.password === state.mailAccount.password;
+      const next = { ...state, mailAccount: { ...state.mailAccount, signedIn: ok } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: ok ? "mail_signed_in" : "mail_sign_in_failed" }) });
+    }
+    case "SIGN_OUT_MAIL": {
+      const next = { ...state, mailAccount: { ...state.mailAccount, signedIn: false } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "mail_signed_out" }) });
+    }
+    case "MARK_MAIL_READ": {
+      const next = { ...state, mail: { ...state.mail, inbox: (state.mail.inbox || []).map((item) => item.id === action.id ? { ...item, unread: false } : item) } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "mail_read", messageId: action.id }) });
+    }
+    case "SEND_MAIL": {
+      const message = { ...action.message, id: action.message.id || `mail-sent-${Date.now()}`, sentAt: Date.now() };
+      const next = { ...state, mail: { ...state.mail, sent: [message, ...(state.mail.sent || [])] } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "mail_sent", hasSubject: Boolean(message.subject), recipientDomain: String(message.to || "").split("@")[1] || "" }) });
+    }
+    case "RECEIVE_MAIL": {
+      const message = { ...action.message, id: action.message.id || `mail-in-${Date.now()}`, receivedAt: Date.now(), unread: true };
+      const next = { ...state, mail: { ...state.mail, inbox: [message, ...(state.mail.inbox || [])] } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "mail_received", messageId: message.id }) });
+    }
+    case "SET_CALCULATOR": {
+      const next = { ...state, calculator: { ...state.calculator, ...action.patch } };
+      return persistSessionState(next);
+    }
+    case "REQUEST_BANK_LOGIN": {
+      const now = Date.now();
+      const request = { id: `bank-login-${now}`, source: "bank-login", requestedAt: now, accountId: state.session.currentUserId, status: "pending", service: "Sunrise Practice Bank" };
+      const next = { ...state, bankAuth: { status: "pending", authenticatedAt: null }, singpass: { transaction: request } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "bank_login_requested" }) });
+    }
+    case "SIGN_OUT_BANK": {
+      const next = { ...state, bankAuth: { status: "signed-out", authenticatedAt: null } };
+      return persistSessionState({ ...next, hiddenLog: appendLog(next, { kind: "bank_signed_out" }) });
+    }
     case "OPEN_APP": {
       const app = action.app;
       if (state.currentApp === app) {
@@ -574,8 +697,10 @@ function reducer(state, action) {
       }
       const learnApp = getCurrentLearnApp(state);
       const allowedSingpassHandoff = learnApp === "bank" && app === "singpass";
+      const allowedConnectivityRecovery = app === "connectivity" && ["whatsapp", "maps", "bank", "singpass", "mail"].includes(learnApp);
+      const allowedConnectivityLesson = learnApp === "connectivity" && ["home", "settings", "connectivity"].includes(app);
       const allowedHomeNavigationPractice = learnApp === "home";
-      if (learnApp && app !== learnApp && !allowedSingpassHandoff && !allowedHomeNavigationPractice) {
+      if (learnApp && app !== learnApp && !allowedSingpassHandoff && !allowedConnectivityRecovery && !allowedConnectivityLesson && !allowedHomeNavigationPractice) {
         return persistSessionState({ ...state, hiddenLog: appendLog(state, { kind: "learn_app_blocked", attemptedApp: app, assignedApp: learnApp }) });
       }
       const baseInteractionMetrics = markFirstAction(state);
@@ -791,6 +916,20 @@ function reducer(state, action) {
       const now = Date.now();
       const next = {
         ...state,
+        connectivity: {
+          view: "overview",
+          wifiEnabled: false,
+          mobileDataEnabled: true,
+          airplaneMode: false,
+          dataSaverEnabled: false,
+          roamingEnabled: false,
+          connectedNetwork: null,
+          wifiErrorCount: 0,
+        },
+        bankAuth: { status: "signed-out", authenticatedAt: null },
+        mailAccount: { created: false, signedIn: false, profile: null, password: "" },
+        mail: { inbox: [], sent: [], drafts: [] },
+        calculator: { expression: "", display: "0", history: [] },
         session: {
           ...state.session,
           joined: true,
@@ -1300,6 +1439,7 @@ function reducer(state, action) {
     }
     case "SET_LEARN_MODULE": {
       const now = Date.now();
+      const learnTargetApp = action.app === "connectivity" ? "home" : action.app;
       const learnMetrics = mergeLearnMetrics(state.learnMetrics);
       const accountMetrics = mergeLearnAccountMetrics(learnMetrics.byAccount?.[action.accountId]);
       const assignmentResult = applyLearnModuleAssignment(state.session, {
@@ -1314,15 +1454,23 @@ function reducer(state, action) {
       const taskResetState = resetCalendarForTaskChange(state, rigidAppointments);
       const next = {
         ...state,
+        connectivity: action.app === "connectivity" ? {
+          ...state.connectivity,
+          view: "overview",
+          wifiEnabled: false,
+          mobileDataEnabled: false,
+          airplaneMode: false,
+          connectedNetwork: null,
+        } : state.connectivity,
         events: taskResetState.events,
         scheduledSourceIds: taskResetState.scheduledSourceIds,
         appMutations: taskResetState.appMutations,
         lastOpenMutationSnapshot: taskResetState.lastOpenMutationSnapshot,
         metrics: taskResetState.metrics,
         singpass: taskResetState.singpass,
-        currentApp: assignmentResult.localTargeted || !state.session.currentUserId ? action.app : state.currentApp,
+        currentApp: assignmentResult.localTargeted || !state.session.currentUserId ? learnTargetApp : state.currentApp,
         tabSwitcherOpen: assignmentResult.localTargeted ? false : state.tabSwitcherOpen,
-        appHistory: assignmentResult.localTargeted ? [action.app] : state.appHistory,
+        appHistory: assignmentResult.localTargeted ? (learnTargetApp === "home" ? [] : [learnTargetApp]) : state.appHistory,
         practiceMetrics: removeAccountsFromByAccount(mergePracticeMetrics(state.practiceMetrics), [action.accountId]),
         assessmentMetrics: removeAccountsFromByAccount(mergeAssessmentMetrics(state.assessmentMetrics), [action.accountId]),
         learnMetrics: {
@@ -1575,9 +1723,9 @@ function reducer(state, action) {
         && String(stimulus.title || "").trim().toLowerCase() === title.toLowerCase()
       ));
       const stimulus = {
-        id: `custom-${app}-${now}`,
+        id: `custom-${app}-${targetId}-${now}`,
         app,
-        threadId: existingThread?.threadId || `custom-${app}-${now}`,
+        threadId: existingThread?.threadId || `custom-${app}-${targetId}-${now}`,
         targetId,
         mode: "free",
         pushedAt: now,
@@ -1788,6 +1936,7 @@ function reducer(state, action) {
       const nextTransaction = { ...transaction, status: "approved", respondedAt: Date.now() };
       const next = {
         ...state,
+        bankAuth: transaction.source === "bank-login" ? { status: "authenticated", authenticatedAt: Date.now() } : state.bankAuth,
         singpass: {
           transaction: nextTransaction,
         },
@@ -1804,6 +1953,7 @@ function reducer(state, action) {
       const nextTransaction = { ...transaction, status: "rejected", respondedAt: Date.now() };
       const next = {
         ...state,
+        bankAuth: transaction.source === "bank-login" ? { status: "rejected", authenticatedAt: null } : state.bankAuth,
         singpass: {
           transaction: nextTransaction,
         },
@@ -1853,6 +2003,23 @@ export function VirtualOSProvider({ children }) {
       state,
       helpers: { minutesToClock, rigidAppointments, todayLabel: calendarMeta.todayLabel, todayDate: calendarMeta.todayDate },
       openApp: (app) => dispatch({ type: "OPEN_APP", app }),
+      openConnectivity: (view = "overview") => {
+        dispatch({ type: "SET_CONNECTIVITY_VIEW", view });
+        dispatch({ type: "OPEN_APP", app: "connectivity" });
+      },
+      setConnectivityView: (view) => dispatch({ type: "SET_CONNECTIVITY_VIEW", view }),
+      setConnectivitySetting: (key, value) => dispatch({ type: "SET_CONNECTIVITY_SETTING", key, value }),
+      connectWifi: (network) => dispatch({ type: "CONNECT_WIFI", network }),
+      disconnectWifi: () => dispatch({ type: "DISCONNECT_WIFI" }),
+      createMailAccount: (account) => dispatch({ type: "CREATE_MAIL_ACCOUNT", ...account }),
+      signInMail: (email, password) => dispatch({ type: "SIGN_IN_MAIL", email, password }),
+      signOutMail: () => dispatch({ type: "SIGN_OUT_MAIL" }),
+      markMailRead: (id) => dispatch({ type: "MARK_MAIL_READ", id }),
+      sendMail: (message) => dispatch({ type: "SEND_MAIL", message }),
+      receiveMail: (message) => dispatch({ type: "RECEIVE_MAIL", message }),
+      setCalculator: (patch) => dispatch({ type: "SET_CALCULATOR", patch }),
+      requestBankLogin: () => dispatch({ type: "REQUEST_BANK_LOGIN" }),
+      signOutBank: () => dispatch({ type: "SIGN_OUT_BANK" }),
       goHome: () => dispatch({ type: "GO_HOME" }),
       goBack: () => dispatch({ type: "GO_BACK" }),
       toggleTabs: () => dispatch({ type: "TOGGLE_TABS" }),

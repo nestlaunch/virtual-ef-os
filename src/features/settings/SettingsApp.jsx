@@ -7,6 +7,23 @@ import { clearAllWhatsAppStorage } from "../whatsapp/whatsappSession";
 
 const DOCTOR_APPOINTMENT_TARGET = getDoctorAppointmentTarget();
 
+function ConnectivitySettingsEntry({ state, onOpen }) {
+  const connection = state.connectivity;
+  const summary = connection.airplaneMode
+    ? "Airplane mode"
+    : connection.connectedNetwork?.name
+      || (connection.mobileDataEnabled ? "Mobile data on" : "Offline");
+  return (
+    <section className="settings-connectivity-entry" aria-label="Connectivity settings">
+      <button type="button" onClick={() => onOpen("overview")}>
+        <span className="settings-connectivity-icon">◔</span>
+        <span><strong>Network & internet</strong><small>{summary}</small></span>
+        <em>›</em>
+      </button>
+    </section>
+  );
+}
+
 function fmtTime(minutes) {
   const h = String(Math.floor((minutes ?? 0) / 60)).padStart(2, "0");
   const m = String((minutes ?? 0) % 60).padStart(2, "0");
@@ -172,7 +189,77 @@ function hasUserWhatsappConfirmation(state, accountId, threadId) {
   ));
 }
 
+const SETTINGS_GROUPS = [
+  [
+    { id: "network", icon: "N", label: "Network & internet", detail: "Wi-Fi, mobile data, airplane mode" },
+    { id: "devices", icon: "D", label: "Connected devices", detail: "Bluetooth and connection preferences" },
+  ],
+  [
+    { id: "apps", icon: "A", label: "Apps", detail: "Recent apps and permissions" },
+    { id: "notifications", icon: "!", label: "Notifications", detail: "Notification history and controls" },
+    { id: "battery", icon: "B", label: "Battery", detail: "61% · About 1 day left" },
+    { id: "storage", icon: "S", label: "Storage", detail: "24 GB used" },
+  ],
+  [
+    { id: "sound", icon: "V", label: "Sound & vibration", detail: "Volume, vibrate, Do Not Disturb" },
+    { id: "display", icon: "O", label: "Display", detail: "Brightness, text size, dark theme" },
+    { id: "accessibility", icon: "+", label: "Accessibility", detail: "Text, display and interaction controls" },
+  ],
+  [
+    { id: "security", icon: "L", label: "Security & privacy", detail: "Screen lock, permissions and updates" },
+    { id: "accounts", icon: "P", label: "Passwords & accounts", detail: "Saved training accounts" },
+    { id: "system", icon: "G", label: "System", detail: "Languages, time, backup and reset" },
+    { id: "about", icon: "i", label: "About phone", detail: "Daily Digital Phone" },
+  ],
+];
+
 export function SettingsApp() {
+  const { state, openConnectivity } = useVirtualOS();
+  const [page, setPage] = useState("main");
+  const [modelTaps, setModelTaps] = useState(0);
+
+  useEffect(() => {
+    function onBack(event) {
+      if (page !== "main") {
+        event.preventDefault();
+        setPage(page === "tracker" ? "about" : "main");
+      }
+    }
+    window.addEventListener("virtual-os-back", onBack);
+    return () => window.removeEventListener("virtual-os-back", onBack);
+  }, [page]);
+
+  function openItem(id) {
+    if (id === "network") {
+      openConnectivity("overview");
+      return;
+    }
+    if (id === "about") setPage("about");
+  }
+
+  function tapModelNumber() {
+    setModelTaps((count) => {
+      const next = count + 1;
+      if (next >= 5) {
+        setPage("tracker");
+        return 0;
+      }
+      return next;
+    });
+  }
+
+  if (page === "tracker") {
+    return <div className="settings-tracker-shell"><button type="button" className="settings-internal-back" onClick={() => setPage("about")}>‹ About phone</button><EvaluationSettings /></div>;
+  }
+
+  if (page === "about") {
+    return <div className="settings-app settings-real-app"><header className="settings-real-header"><button type="button" onClick={() => setPage("main")} aria-label="Back to Settings">‹</button><h2>About phone</h2></header><section className="about-device-card"><span>DD</span><strong>Daily Digital Phone</strong><small>Training simulation device</small></section><section className="settings-real-group about-list"><div><span>Device name</span><strong>Daily Digital Phone</strong></div><div><span>Phone number</span><strong>Not available</strong></div><div><span>Android version</span><strong>14 · simulated</strong></div><button type="button" onClick={tapModelNumber}><span>Model number</span><strong>DD-OT-01</strong></button><div><span>Build number</span><strong>DailyDigital.2026.07</strong></div></section><p className="settings-about-note">All device and account information shown here is fictional.</p></div>;
+  }
+
+  return <div className="settings-app settings-real-app"><header className="settings-real-title"><h2>Settings</h2></header><label className="settings-search"><span>⌕</span><input aria-label="Search settings" placeholder="Search settings" /></label>{SETTINGS_GROUPS.map((group, index) => <section className="settings-real-group" key={index}>{group.map((item) => <button type="button" key={item.id} onClick={() => openItem(item.id)}><span className="settings-real-icon">{item.icon}</span><span><strong>{item.label}</strong><small>{item.id === "network" ? state.connectivity.connectedNetwork?.name || (state.connectivity.mobileDataEnabled ? "Mobile data on" : "Offline") : item.detail}</small></span><em>›</em></button>)}</section>)}</div>;
+}
+
+function EvaluationSettings() {
   const { state, helpers, resetEvaluation, markEvaluationCompleted, startLocalMode } = useVirtualOS();
   const containerRef = useRef(null);
   const [atBottom, setAtBottom] = useState(false);

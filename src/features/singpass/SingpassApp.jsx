@@ -136,9 +136,7 @@ export function SingpassApp() {
     window.dispatchEvent(new CustomEvent("virtual-os-learn-singpass-approved", {
       detail: { payee: transaction?.payee, amount: transaction?.amount },
     }));
-    window.dispatchEvent(new CustomEvent("virtual-os-learn-bank-payment", {
-      detail: { payee: transaction?.payee, amount: transaction?.amount },
-    }));
+    if (transaction?.source !== "bank-login") window.dispatchEvent(new CustomEvent("virtual-os-learn-bank-payment", { detail: { payee: transaction?.payee, amount: transaction?.amount } }));
     setScreen("result");
   }
 
@@ -151,22 +149,25 @@ export function SingpassApp() {
   }
 
   if (screen === "approval" && transaction) {
+    const isBankLogin = transaction.source === "bank-login";
     return (
       <div className="singpass-app singpass-dark">
         <SingpassTopBar title="Authorise" onBack={() => goDashboard("home")} onSettings={() => setSettingsOpen(true)} />
         <main className="singpass-scroll">
           <section className="singpass-approval-hero singpass-approval-card" data-learn-target="singpass-approval-card">
             <div className="singpass-auth-mark">!</div>
-            <p>Payment request</p>
-            <h2>Review transaction</h2>
-            <span>Approve only if these details match the payment you started.</span>
+            <p>{isBankLogin ? "Login request" : "Payment request"}</p>
+            <h2>{isBankLogin ? "Log in to Sunrise Bank" : "Review transaction"}</h2>
+            <span>{isBankLogin ? "Continue only if you opened the Sunrise Practice Bank app." : "Approve only if these details match the payment you started."}</span>
           </section>
 
           <section className="singpass-dark-card">
+            {isBankLogin ? <><DetailRow label="Service" value={transaction.service} /><DetailRow label="Request" value="Bank account login" /></> : <>
             <DetailRow label="Recipient" value={transaction.payee} />
             <DetailRow label="Amount" value={maskAmount(transaction.amount)} />
             <DetailRow label="Purpose" value={transaction.purpose} />
             <DetailRow label="Reference" value={transaction.reference} />
+            </>}
           </section>
 
           <div className="singpass-action-row">
@@ -225,6 +226,7 @@ export function SingpassApp() {
 
   if (screen === "result") {
     const approved = state.singpass?.transaction?.status === "approved";
+    const isBankLogin = state.singpass?.transaction?.source === "bank-login";
     return (
       <div className="singpass-app singpass-dark">
         <SingpassTopBar title="Result" onBack={() => goDashboard("home")} onSettings={() => setSettingsOpen(true)} />
@@ -232,8 +234,8 @@ export function SingpassApp() {
           <section className={`singpass-result-card ${approved ? "approved" : "rejected"}`}>
             <div className="singpass-auth-mark">{approved ? "OK" : "X"}</div>
             <p>{approved ? "Approved" : "Rejected"}</p>
-            <h2>{approved ? "Transaction authorised" : "Transaction stopped"}</h2>
-            <span>{approved ? "Return to Bank to view the payment result." : "No simulated payment was made."}</span>
+            <h2>{approved ? isBankLogin ? "Bank login approved" : "Transaction authorised" : isBankLogin ? "Bank login rejected" : "Transaction stopped"}</h2>
+            <span>{approved ? isBankLogin ? "Return to Sunrise Bank to continue." : "Return to Bank to view the payment result." : isBankLogin ? "Sunrise Bank was not signed in." : "No simulated payment was made."}</span>
             <button type="button" className="singpass-primary-btn" onClick={() => openApp("bank")}>
               Return to Bank
             </button>
@@ -305,8 +307,8 @@ function HomeTab({
       {transaction?.status === "pending" ? (
         <button type="button" className="singpass-pending-banner" data-learn-target="singpass-pending-request" onClick={onApproval}>
           <span>Pending approval</span>
-          <strong>{transaction.payee}</strong>
-          <em>{maskAmount(transaction.amount)}</em>
+          <strong>{transaction.source === "bank-login" ? transaction.service : transaction.payee}</strong>
+          <em>{transaction.source === "bank-login" ? "Login" : maskAmount(transaction.amount)}</em>
         </button>
       ) : null}
 

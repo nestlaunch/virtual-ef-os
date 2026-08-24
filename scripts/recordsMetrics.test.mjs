@@ -1450,6 +1450,8 @@ assert.equal(isCorrectLearnAnswer("Hougang Polyclinic, S$250.00", TASK_ANSWER_CH
 const practiceGuideSource = readFileSync(new URL("../src/features/practice/practiceGuides.js", import.meta.url), "utf8");
 const mapsAppSource = readFileSync(new URL("../src/features/maps/MapsApp.jsx", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../src/app/App.jsx", import.meta.url), "utf8");
+const joinSessionSource = readFileSync(new URL("../src/features/session/JoinSession.jsx", import.meta.url), "utf8");
+const dockSource = readFileSync(new URL("../src/features/system/Dock.jsx", import.meta.url), "utf8");
 const assessmentOverlaySource = readFileSync(new URL("../src/features/assessment/AssessmentOverlays.jsx", import.meta.url), "utf8");
 SCENARIO_LIBRARY
   .filter((scenario) => scenario.id.startsWith("single-"))
@@ -1465,7 +1467,13 @@ assert.equal(practiceGuideSource.includes('event.target.value.trim().toLowerCase
 assert.equal(mapsAppSource.includes('id: "home", name: "Home"'), true);
 assert.equal(mapsAppSource.includes('"home|hougang-polyclinic": { transit: 14'), true);
 assert.equal(appSource.includes('onClick={onOnlineMode}'), true);
-assert.equal(appSource.includes('<JoinSession />'), true);
+assert.equal(appSource.includes('<JoinSession onBack={handleOnlineBack} />'), true);
+assert.equal(appSource.includes('dailyDigitalOnlineEntry'), true);
+assert.equal(appSource.includes('onReturnToMain={isOnlineMode ? handleOnlineBack : null}'), true);
+assert.equal(appSource.includes('PhoneOrientationPanel'), false);
+assert.equal(joinSessionSource.includes('className="join-main-back"'), true);
+assert.equal(joinSessionSource.includes('Back to main page'), true);
+assert.equal(dockSource.includes('onExit && isAtPhoneHome'), true);
 assert.equal(assessmentOverlaySource.includes('className="assessment-offline-results"'), true);
 assert.equal(assessmentOverlaySource.includes('state.workspace?.mode === "local"'), true);
 

@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { VirtualOSProvider, useVirtualOS } from "../state/VirtualOSContext";
 import { StatusBar } from "../features/system/StatusBar";
+import { NotificationShade } from "../features/system/NotificationShade";
+import { ConnectivityApp } from "../features/connectivity/ConnectivityApp";
 import { HomeScreen } from "../features/home/HomeScreen";
 import { CalendarApp } from "../features/calendar/CalendarApp";
 import { SMSApp } from "../features/messages/SMSApp";
@@ -10,6 +12,8 @@ import { SettingsApp } from "../features/settings/SettingsApp";
 import { MapsApp } from "../features/maps/MapsApp";
 import { BankApp } from "../features/bank/BankApp";
 import { SingpassApp } from "../features/singpass/SingpassApp";
+import { MailApp } from "../features/mail/MailApp";
+import { CalculatorApp } from "../features/calculator/CalculatorApp";
 import { Dock } from "../features/system/Dock";
 import { GuideCursor } from "../features/system/GuideCursor";
 import { AdminPanel } from "../features/admin/AdminPanel";
@@ -19,8 +23,9 @@ import { PracticeGuidePanel } from "../features/practice/PracticeGuidePanel";
 import { LEARN_APP_CATALOG, SCENARIO_LIBRARY, SESSION_MODES, formatAlias } from "../state/v2Assessment";
 import { getLatestCustomStimulusForState, getLatestUnreadStimulus } from "../state/stimulusSequence";
 import { getCurrentAssignment } from "../state/sessionLifecycle";
+import { getCloudApiBaseUrl, getStoredCloudAdminKey, setStoredCloudAdminKey, verifyCloudAdminKey } from "../state/cloudSync";
+import { resolvePatientEntryScreen } from "../state/entryFlow";
 import { LearnTourOverlay, getAssignedLearnApp, getBroadLearnStep, getLearnModuleForState, isAllowedLearnTarget } from "../features/learn/LearnTourOverlay";
-import { PhoneOrientationPanel, hasCompletedPhoneOrientation } from "../features/learn/PhoneOrientationPanel";
 import { AssessmentCompleteOverlay, AssessmentPromptOverlay, AssessmentStartOverlay, AssessmentTaskPanel, getActiveAssessmentScenario } from "../features/assessment/AssessmentOverlays";
 import { isSupportTarget } from "./supportTargets";
 import appLogo from "../assets/daily-digital-logo.png";
@@ -29,14 +34,14 @@ function StimulusNotification() {
   const { state, openApp, markStimulusRead, dismissStimulus } = useVirtualOS();
   const stimulus = getLatestUnreadStimulus(state);
 
-  if (!stimulus || !state.session.joined || state.session.completedAt) {
+  if (!stimulus || !state.session.joined || state.session.completedAt || state.session.endingStartedAt) {
     return null;
   }
 
   const targetApp = stimulus.app === "sms" ? "sms" : "whatsapp";
 
   return (
-    <aside className={`stimulus-notification ${stimulus.app}`}>
+    <aside key={stimulus.id} className={`stimulus-notification ${stimulus.app}`} role="status" aria-live="polite">
       <button
         type="button"
         onClick={() => {
@@ -105,6 +110,9 @@ function AppSwitcher() {
     { id: "maps", label: "Maps" },
     { id: "bank", label: "Bank" },
     { id: "singpass", label: "Singpass" },
+    { id: "mail", label: "Mail" },
+    { id: "calculator", label: "Calculator" },
+    { id: "connectivity", label: "Network & internet" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -137,8 +145,9 @@ function AppSwitcher() {
   );
 }
 
-function ActiveApp() {
+function ActiveApp({ onReturnToMain }) {
   const { state } = useVirtualOS();
+  const [notificationShadeOpen, setNotificationShadeOpen] = useState(false);
   const activeApp = state.currentApp === "instructions" ? "home" : state.currentApp;
 
   const appMap = {
@@ -150,11 +159,18 @@ function ActiveApp() {
     bank: <BankApp />,
     singpass: <SingpassApp />,
     settings: <SettingsApp />,
+    connectivity: <ConnectivityApp />,
+    mail: <MailApp />,
+    calculator: <CalculatorApp />,
   };
+  const internetRequired = new Set(["whatsapp", "maps", "bank", "singpass", "mail"]);
+  const hasWifiInternet = Boolean(state.connectivity.connectedNetwork) && state.connectivity.connectedNetwork.internetAvailable !== false;
+  const hasMobileInternet = state.connectivity.mobileDataEnabled && !state.connectivity.airplaneMode;
+  const isOffline = internetRequired.has(activeApp) && !hasWifiInternet && !hasMobileInternet;
 
   return (
     <>
-      <StatusBar />
+      <StatusBar onOpenNotifications={() => setNotificationShadeOpen(true)} />
       <div className="phone-content">
         <AnimatePresence mode="wait">
           <motion.div
@@ -165,18 +181,40 @@ function ActiveApp() {
             transition={{ duration: 0.22 }}
             className="app-page"
           >
-            {appMap[activeApp] || <HomeScreen />}
+            {isOffline ? <NetworkUnavailable app={activeApp} /> : appMap[activeApp] || <HomeScreen />}
           </motion.div>
         </AnimatePresence>
       </div>
-      <Dock />
+      <Dock onExit={onReturnToMain} />
       <StimulusNotification />
       <AppSwitcher />
+      <NotificationShade open={notificationShadeOpen} onOpen={() => setNotificationShadeOpen(true)} onClose={() => setNotificationShadeOpen(false)} />
     </>
   );
 }
 
-function ModeLanding({ onLocalMode, onOnlineMode }) {
+function NetworkUnavailable({ app }) {
+  const { state, openConnectivity, setConnectivitySetting } = useVirtualOS();
+  const labels = { whatsapp: "WhatsApp", maps: "Maps", bank: "Sunrise Bank", singpass: "Singpass", mail: "Daily Mail" };
+  const effectiveMode = state.session.currentUserId
+    ? state.session.userModes[state.session.currentUserId] || state.session.mode
+    : state.session.mode;
+  const isLearnMode = effectiveMode === "learn";
+  return <div className={`network-unavailable ${isLearnMode ? "learn-connectivity" : ""}`} role="status" data-support-ui={isLearnMode ? "true" : undefined}>
+    {isLearnMode ? <span className="network-learn-label">Learn · Internet connection</span> : null}
+    <span className="network-offline-icon">!</span>
+    <h2>{isLearnMode ? "This app needs internet" : "No internet connection"}</h2>
+    <p>{labels[app] || "This feature"} can’t connect because both usable Wi-Fi and mobile data are off.</p>
+    {isLearnMode ? <div className="network-learning-card"><strong>Choose one way to get online:</strong><p><b>Mobile data</b> uses the simulated mobile plan when you are away from Wi-Fi.</p><p><b>Wi-Fi</b> connects through a nearby network.</p></div> : null}
+    <div className="network-recovery-actions">
+      <button type="button" data-support-ui="true" onClick={() => setConnectivitySetting("mobileDataEnabled", true)}>Turn on mobile data</button>
+      <button type="button" data-support-ui="true" className="secondary" onClick={() => openConnectivity("wifi")}>Connect to Wi-Fi</button>
+    </div>
+    {isLearnMode ? <p className="network-learn-hint">After you connect, {labels[app] || "the app"} will load automatically.</p> : <small>ERR_INTERNET_DISCONNECTED</small>}
+  </div>;
+}
+
+function ModeLanding({ onLocalMode, onOnlineMode, onlineAvailable }) {
   return (
     <main className="mode-landing">
       <section className="mode-landing-panel" aria-label="Daily Digital mode selection">
@@ -185,14 +223,67 @@ function ModeLanding({ onLocalMode, onOnlineMode }) {
           <button type="button" onClick={onLocalMode}>
             <span>1</span>
             <strong>Local mode</strong>
+            <em>No alias or login required</em>
           </button>
-          <button type="button" onClick={onOnlineMode}>
+          <button type="button" onClick={onOnlineMode} disabled={!onlineAvailable}>
             <span>2</span>
             <strong>Online mode</strong>
-            <em>Join a clinician session</em>
+            <em>{onlineAvailable ? "Join a clinician session" : "Unavailable in this offline deployment"}</em>
           </button>
         </div>
+        {!onlineAvailable ? <p className="offline-deployment-note">This version runs locally in your browser. Choose Local mode to practise without an online account or session PIN.</p> : null}
       </section>
+    </main>
+  );
+}
+
+function AdminAccessGate({ onlineAvailable, children }) {
+  const [status, setStatus] = useState(onlineAvailable ? "checking" : "ready");
+  const [key, setKey] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!onlineAvailable) return;
+    const storedKey = getStoredCloudAdminKey();
+    if (!storedKey) {
+      setStatus("locked");
+      return;
+    }
+    verifyCloudAdminKey(storedKey).then((valid) => {
+      if (!valid) setStoredCloudAdminKey("");
+      setStatus(valid ? "ready" : "locked");
+    });
+  }, [onlineAvailable]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setStatus("checking");
+    setError("");
+    const valid = await verifyCloudAdminKey(key);
+    if (!valid) {
+      setStoredCloudAdminKey("");
+      setError("That clinician access key was not accepted.");
+      setStatus("locked");
+      return;
+    }
+    setKey("");
+    setStatus("ready");
+  }
+
+  if (status === "ready") return children;
+  return (
+    <main className="admin-access-screen">
+      <form className="admin-access-card" onSubmit={handleSubmit}>
+        <span className="join-kicker">Clinician workspace</span>
+        <h1>Secure admin access</h1>
+        <p>Enter the deployment access key. It is kept only for this browser tab.</p>
+        <label>
+          Clinician access key
+          <input type="password" value={key} onChange={(event) => setKey(event.target.value)} autoComplete="current-password" disabled={status === "checking"} />
+        </label>
+        {error ? <strong className="join-error" role="alert">{error}</strong> : null}
+        <button type="submit" disabled={!key.trim() || status === "checking"}>{status === "checking" ? "Checking…" : "Open clinician workspace"}</button>
+      </form>
     </main>
   );
 }
@@ -228,6 +319,10 @@ function LocalModeSetup({ onBack, onStart }) {
         <div className="local-setup-steps" aria-label="Local setup steps">
           <span className={step === 1 ? "active" : ""}>1</span>
           <span className={step === 2 ? "active" : ""}>2</span>
+        </div>
+        <div className="local-anonymous-notice" role="status">
+          <strong>Local practice — no sign-in</strong>
+          <span>No alias, account, user PIN, or session PIN is required. Activity stays on this browser.</span>
         </div>
         {step === 1 ? (
           <>
@@ -289,7 +384,6 @@ function ClinicalWorkspace() {
   const { state, logoutUser, returnToMainPage, startLocalMode, trackInteraction, trackLearnAttempt } = useVirtualOS();
   const focusedInputs = useRef(new WeakMap());
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [orientationComplete, setOrientationComplete] = useState(() => hasCompletedPhoneOrientation(state.session));
   const isAdminRoute = window.location.pathname.replace(/\/+$/, "") === "/admin";
   const [entryMode, setEntryMode] = useState(() => {
     try {
@@ -298,9 +392,11 @@ function ClinicalWorkspace() {
       return "";
     }
   });
-  const isLocalSetup = entryMode === "local-setup";
-  const isLocalMode = entryMode === "local-active" || state.workspace.mode === "local";
-  const isOnlineMode = entryMode === "online-active";
+  const onlineAvailable = Boolean(getCloudApiBaseUrl());
+  const patientEntryScreen = resolvePatientEntryScreen({ entryMode, onlineAvailable, joined: state.session.joined });
+  const isLocalSetup = patientEntryScreen === "local-setup";
+  const isLocalMode = entryMode === "local-active";
+  const isOnlineMode = entryMode === "online-active" && onlineAvailable;
   const currentAccount = state.session.userAccounts.find((account) => account.id === state.session.currentUserId);
   const effectiveMode = state.session.currentUserId
     ? state.session.userModes[state.session.currentUserId] || state.session.mode
@@ -314,15 +410,12 @@ function ClinicalWorkspace() {
     ? state.assessmentMetrics?.byAccount?.[state.session.currentUserId]
     : null;
   const activeFreeStimulus = getLatestCustomStimulusForState(state);
+  const sessionIsEnding = Boolean(state.session.joined && state.session.endingStartedAt);
   const hasSideGuide = Boolean(assignedLearnApp)
     || Boolean(effectiveMode === "practice" && activePracticeScenarioId)
     || Boolean(effectiveMode === "assessment" && activeAssessmentScenario && currentAssessmentMetrics?.startedByUserAt)
     || Boolean(effectiveMode === "free" && activeFreeStimulus);
-  const hasCompanionPanel = !orientationComplete || hasSideGuide;
-
-  useEffect(() => {
-    setOrientationComplete(hasCompletedPhoneOrientation(state.session));
-  }, [state.session.currentUserId, state.session.pin]);
+  const hasCompanionPanel = !sessionIsEnding && hasSideGuide;
 
   function describeTarget(target) {
     if (!target) {
@@ -502,11 +595,24 @@ function ClinicalWorkspace() {
     returnToMainPage();
   }
 
+  function handleOnlineBack() {
+    if (window.history.state?.dailyDigitalOnlineEntry) {
+      window.history.back();
+      return;
+    }
+    handleReturnToMain();
+  }
+
   function handleLocalMode() {
+    returnToMainPage();
     setStoredEntryMode("local-setup");
   }
 
   function handleOnlineMode() {
+    if (!onlineAvailable) {
+      setStoredEntryMode("");
+      return;
+    }
     setStoredEntryMode("online-active");
   }
 
@@ -515,28 +621,48 @@ function ClinicalWorkspace() {
     setStoredEntryMode("local-active");
   }
 
-  if (!isAdminRoute && !isLocalMode && !isOnlineMode) {
+  useEffect(() => {
+    if (isAdminRoute || !isOnlineMode) {
+      return undefined;
+    }
+    if (!window.history.state?.dailyDigitalOnlineEntry) {
+      window.history.pushState(
+        { ...(window.history.state || {}), dailyDigitalOnlineEntry: true },
+        "",
+        window.location.href,
+      );
+    }
+    function handleBrowserBack() {
+      handleReturnToMain();
+    }
+    window.addEventListener("popstate", handleBrowserBack);
+    return () => window.removeEventListener("popstate", handleBrowserBack);
+  }, [isAdminRoute, isOnlineMode]);
+
+  if (!isAdminRoute && (patientEntryScreen === "landing" || patientEntryScreen === "local-setup")) {
     if (isLocalSetup) {
       return <LocalModeSetup onBack={handleReturnToMain} onStart={handleStartLocalMode} />;
     }
-    return <ModeLanding onLocalMode={handleLocalMode} onOnlineMode={handleOnlineMode} />;
+    return <ModeLanding onLocalMode={handleLocalMode} onOnlineMode={handleOnlineMode} onlineAvailable={onlineAvailable} />;
   }
 
   const simulator = (
     <section className={`simulator-stage ${hasCompanionPanel ? "with-learn-panel with-side-panel" : ""}`}>
-      {!isAdminRoute && currentAccount ? (
+      {!isAdminRoute && isLocalMode ? (
+        <div className="patient-session-chip local-session-chip">
+          <span>Local mode</span>
+          <strong>No account required</strong>
+          <button type="button" onClick={handleReturnToMain} data-support-ui="true">
+            Main page
+          </button>
+        </div>
+      ) : !isAdminRoute && currentAccount ? (
         <div className="patient-session-chip">
-          <span>{isLocalMode ? "Local profile" : "Signed in as"}</span>
+          <span>Signed in as</span>
           <strong>{formatAlias(currentAccount.alias)}</strong>
-          {isLocalMode ? (
-            <button type="button" onClick={handleReturnToMain} data-support-ui="true">
-              Main page
-            </button>
-          ) : (
-            <button type="button" onClick={() => setShowLogoutConfirm(true)} data-support-ui="true">
-              Log out
-            </button>
-          )}
+          <button type="button" onClick={() => setShowLogoutConfirm(true)} data-support-ui="true">
+            Log out
+          </button>
         </div>
       ) : null}
       <section
@@ -548,17 +674,24 @@ function ClinicalWorkspace() {
         onFocusCapture={handleFocus}
         onKeyDownCapture={handleKeyDown}
       >
-        <ActiveApp />
-        {orientationComplete ? <AssessmentStartOverlay /> : null}
-        {orientationComplete ? <AssessmentPromptOverlay /> : null}
-        {orientationComplete ? <AssessmentCompleteOverlay /> : null}
+        <ActiveApp onReturnToMain={isOnlineMode ? handleOnlineBack : null} />
+        {!sessionIsEnding ? (
+          <>
+            <AssessmentStartOverlay />
+            <AssessmentPromptOverlay />
+            <AssessmentCompleteOverlay />
+          </>
+        ) : null}
         <SessionEndedOverlay />
       </section>
-      {!orientationComplete ? <PhoneOrientationPanel onComplete={() => setOrientationComplete(true)} /> : null}
-      {orientationComplete ? <LearnTourOverlay /> : null}
-      {orientationComplete ? <PracticeGuidePanel /> : null}
-      {orientationComplete ? <AssessmentTaskPanel /> : null}
-      {orientationComplete ? <FreeTaskPanel /> : null}
+      {!sessionIsEnding ? (
+        <>
+          <LearnTourOverlay />
+          <PracticeGuidePanel />
+          <AssessmentTaskPanel />
+          <FreeTaskPanel />
+        </>
+      ) : null}
       {showLogoutConfirm ? (
         <aside className="logout-confirm-overlay" role="dialog" aria-modal="true" aria-label="Confirm log out" data-support-ui="true">
           <div>
@@ -587,9 +720,11 @@ function ClinicalWorkspace() {
   return (
     <main className={`clinical-workspace ${isAdminRoute ? "with-panel" : "patient-only"} ${isLocalMode ? "local-mode" : ""}`}>
       {isAdminRoute ? (
-        <AdminPanel />
-      ) : !state.session.joined ? (
-        <JoinSession />
+        <AdminAccessGate onlineAvailable={onlineAvailable}><AdminPanel /></AdminAccessGate>
+      ) : isLocalMode ? (
+        simulator
+      ) : patientEntryScreen === "online-login" ? (
+        <JoinSession onBack={handleOnlineBack} />
       ) : (
         simulator
       )}

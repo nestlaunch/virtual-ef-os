@@ -3,7 +3,7 @@ import { ALIAS_POOL, formatAlias } from "../../state/v2Assessment";
 import { useVirtualOS } from "../../state/VirtualOSContext";
 import { createCloudAccount, listCloudAccounts, loginCloudAccount } from "../../state/cloudSync";
 
-export function JoinSession() {
+export function JoinSession({ onBack }) {
   const { state, joinSession, setPendingUserIdentity, addUserAccount } = useVirtualOS();
   const [step, setStep] = useState(1);
   const [accountMode, setAccountMode] = useState("login");
@@ -11,46 +11,57 @@ export function JoinSession() {
   const [pin, setPin] = useState("");
   const [userPin, setUserPin] = useState("");
   const [identityError, setIdentityError] = useState("");
-  const [cloudAccounts, setCloudAccounts] = useState([]);
   const [authenticatedAccount, setAuthenticatedAccount] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [cloudAccounts, setCloudAccounts] = useState([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function refreshAccounts() {
-      const accounts = await listCloudAccounts();
-      if (!cancelled) {
-        setCloudAccounts(accounts);
+  const createdAccounts = useMemo(() => {
+    const accountsByAlias = new Map();
+    [...state.session.userAccounts, ...cloudAccounts].forEach((account) => {
+      const cleanAlias = String(account?.alias || "").trim();
+      if (cleanAlias) {
+        accountsByAlias.set(cleanAlias.toLowerCase(), { ...account, alias: cleanAlias });
       }
-    }
-    refreshAccounts();
-    window.addEventListener("focus", refreshAccounts);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", refreshAccounts);
-    };
-  }, []);
-
-  const loginAccounts = useMemo(() => {
-    return [...cloudAccounts].sort((a, b) => a.alias.localeCompare(b.alias));
-  }, [cloudAccounts]);
+    });
+    return [...accountsByAlias.values()].sort((a, b) => a.alias.localeCompare(b.alias));
+  }, [cloudAccounts, state.session.userAccounts]);
 
   const availableAliases = useMemo(() => {
     const taken = new Set([
-      ...cloudAccounts.map((account) => account.alias?.toLowerCase()).filter(Boolean),
       ...state.session.userAccounts.map((account) => account.alias?.toLowerCase()).filter(Boolean),
     ]);
     return ALIAS_POOL.filter((item) => !taken.has(item.toLowerCase()));
-  }, [cloudAccounts, state.session.userAccounts]);
+  }, [state.session.userAccounts]);
 
   useEffect(() => {
-    if (accountMode === "login" && alias && !loginAccounts.some((account) => account.alias === alias)) {
-      setAlias("");
-    }
     if (accountMode === "create" && (!alias || !availableAliases.includes(alias))) {
       setAlias(availableAliases[0] || "");
     }
-  }, [accountMode, alias, availableAliases, loginAccounts]);
+  }, [accountMode, alias, availableAliases]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listCloudAccounts()
+      .then((accounts) => {
+        if (!cancelled) {
+          setCloudAccounts(accounts);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCloudAccounts([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAccountsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleIdentitySubmit(event) {
     event.preventDefault();
@@ -59,7 +70,7 @@ export function JoinSession() {
     setIdentityError("");
     let verifiedAccount = null;
     if (accountMode === "create") {
-      const duplicateAlias = [...state.session.userAccounts, ...cloudAccounts].some((account) => account.alias.toLowerCase() === cleanAlias.toLowerCase());
+      const duplicateAlias = state.session.userAccounts.some((account) => account.alias.toLowerCase() === cleanAlias.toLowerCase());
       if (duplicateAlias) {
         setIdentityError("This alias has already been created.");
         setSubmitting(false);
@@ -73,16 +84,11 @@ export function JoinSession() {
       }
       if (created?.existing) {
         setIdentityError("This alias has already been created.");
-        const accounts = await listCloudAccounts();
-        setCloudAccounts(accounts);
         setSubmitting(false);
         return;
       }
       addUserAccount({ id: created?.account?.id, alias: cleanAlias, pin: userPin, participantCode: created?.account?.participantCode });
       verifiedAccount = created.account;
-      setCloudAccounts((accounts) => created?.account
-        ? [...accounts.filter((account) => account.id !== created.account.id), created.account]
-        : accounts);
     } else {
       const login = await loginCloudAccount(cleanAlias, userPin);
       if (!login.ok) {
@@ -113,6 +119,9 @@ export function JoinSession() {
   return (
     <main className="join-screen">
       <section className="join-card">
+        <button type="button" className="join-main-back" onClick={onBack}>
+          <span aria-hidden="true">←</span> Back to main page
+        </button>
         <span className="join-kicker">Secure practice login</span>
         <div className="join-steps" aria-label="Join steps">
           <span className={step === 1 ? "active" : ""}>1</span>
@@ -124,25 +133,28 @@ export function JoinSession() {
             <p>Use your assigned alias and 4-digit user PIN.</p>
             <form className="identity-form" onSubmit={handleIdentitySubmit}>
               <h2>Login details</h2>
-              <select
-                value={alias}
-                onChange={(event) => {
-                  setAlias(event.target.value);
-                  setUserPin("");
-                  setAuthenticatedAccount(null);
-                }}
-                aria-label="Assigned alias"
-                disabled={accountMode === "login" && loginAccounts.length === 0}
-              >
-                {accountMode === "login" ? (
-                  <option value="">{loginAccounts.length === 0 ? "No accounts created yet" : "Select an account"}</option>
-                ) : null}
-                {(accountMode === "login" ? loginAccounts : availableAliases).map((item) => {
-                  const value = typeof item === "string" ? item : item.alias;
-                  const key = typeof item === "string" ? item : item.id;
-                  return <option key={key} value={value}>{formatAlias(value)}</option>;
-                })}
-              </select>
+              {accountMode === "login" ? (
+                <select
+                  value={alias}
+                  onChange={(event) => {
+                    setAlias(event.target.value);
+                    setUserPin("");
+                    setAuthenticatedAccount(null);
+                  }}
+                  aria-label="Assigned alias"
+                  autoComplete="username"
+                  disabled={accountsLoading && createdAccounts.length === 0}
+                >
+                  <option value="">{accountsLoading ? "Loading assigned aliases…" : "Select assigned alias"}</option>
+                  {createdAccounts.map((account) => (
+                    <option key={account.id || account.alias} value={account.alias}>{formatAlias(account.alias)}</option>
+                  ))}
+                </select>
+              ) : (
+                <select value={alias} onChange={(event) => setAlias(event.target.value)} aria-label="Choose a fictional alias">
+                  {availableAliases.map((item) => <option key={item} value={item}>{formatAlias(item)}</option>)}
+                </select>
+              )}
               <input
                 value={userPin}
                 onChange={(event) => setUserPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
@@ -152,7 +164,7 @@ export function JoinSession() {
                 aria-label="User PIN"
                 disabled={!alias}
               />
-              {!alias ? <small className="identity-hint">Select an account before entering its PIN.</small> : null}
+              {!alias ? <small className="identity-hint">Select the assigned alias before entering its PIN.</small> : null}
               <button type="submit" disabled={!alias.trim() || userPin.length !== 4 || submitting}>
                 {submitting ? "Checking..." : accountMode === "login" ? "Access account" : "Create account"}
               </button>

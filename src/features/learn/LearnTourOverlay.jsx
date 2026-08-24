@@ -147,6 +147,9 @@ export function getLearnModuleForState(state) {
   if (assignedApp === "bank" && state.currentApp === "singpass") {
     return LEARN_MODULES.bank;
   }
+  if (assignedApp === "connectivity" && ["home", "settings", "connectivity"].includes(state.currentApp)) {
+    return LEARN_MODULES.connectivity;
+  }
   return assignedApp && state.currentApp === assignedApp ? LEARN_MODULES[assignedApp] : null;
 }
 
@@ -212,6 +215,8 @@ export function LearnTourOverlay() {
     ? LEARN_MODULES.home
     : assignedApp === "bank" && state.currentApp === "singpass"
     ? LEARN_MODULES.bank
+    : assignedApp === "connectivity" && ["home", "settings", "connectivity"].includes(state.currentApp)
+    ? LEARN_MODULES.connectivity
     : assignedApp && state.currentApp === assignedApp ? LEARN_MODULES[assignedApp] : null;
   const activeStep = guide?.steps[stepIndex] || guide?.steps[0] || null;
   const activeStepKey = getStepKey(assignedApp, activeStep, stepIndex);

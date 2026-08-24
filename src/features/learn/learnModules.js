@@ -215,6 +215,66 @@ export const LEARN_MODULES = {
       },
     ],
   },
+  connectivity: {
+    title: "Connect to the Internet",
+    steps: [
+      {
+        label: "Check the network icon",
+        selectors: ['[data-learn-target="status-signal"]'],
+        teaching: true,
+        instruction: "Look at the top-right network icon. **4G or 5G** means mobile internet is available. **Wi-Fi** means Wi-Fi internet is available. **×** means there is no connection.",
+        output: "The icon currently shows × because this lesson starts offline.",
+      },
+      {
+        label: "Know what the icon means",
+        selectors: ['[data-learn-target="status-signal"]'],
+        instruction: "Apps such as Mail, Maps, WhatsApp, Bank, and Singpass need an internet connection.",
+        question: "Which icon shows that mobile internet is available?",
+        answers: [
+          { label: "4G or 5G", correct: true },
+          { label: "×", correct: false },
+          { label: "Battery", correct: false },
+        ],
+      },
+      {
+        label: "Open quick settings",
+        selectors: [".os-statusbar"],
+        instruction: "Tap the top status bar to pull down the notification panel.",
+        advanceOn: "click",
+      },
+      {
+        label: "Turn on mobile data",
+        selectors: ['[data-learn-target="shade-mobile-data"]'],
+        instruction: "Mobile data is Off. Tap the **Mobile data** tile to turn it on.",
+        advanceOn: "click",
+        validate: (event) => Boolean(event.target?.closest?.('[data-learn-target="shade-mobile-data"]')),
+      },
+      {
+        label: "Close quick settings",
+        selectors: ['[data-learn-target="shade-close"]'],
+        instruction: "Tap the bottom handle to close the notification panel.",
+        advanceOn: "click",
+      },
+      {
+        label: "Confirm the connection",
+        selectors: ['[data-learn-target="status-signal"]'],
+        instruction: "Look at the top-right icon again. It now shows 5G, so mobile internet is available.",
+        question: "An app says ‘No internet connection’. What should you do first?",
+        answers: [
+          { label: "Check the network icon, then turn on Wi-Fi or mobile data", correct: true },
+          { label: "Keep tapping the app", correct: false },
+          { label: "Delete the app", correct: false },
+        ],
+      },
+      {
+        label: "Another way to connect",
+        selectors: ['[data-learn-target="status-signal"]'],
+        teaching: true,
+        instruction: "You can also open **Settings → Network & internet** to turn on mobile data or connect to Wi-Fi.",
+        output: "Remember: check the icon → open notification panel or Settings → turn on Wi-Fi or mobile data → retry the app.",
+      },
+    ],
+  },
   sms: {
     title: "Messages target",
     steps: [

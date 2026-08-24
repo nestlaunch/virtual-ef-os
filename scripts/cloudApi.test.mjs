@@ -230,7 +230,16 @@ async function request(env, path, options = {}) {
   return { response, payload };
 }
 
-const env = { DB: createMockDb(), ALLOWED_ORIGINS: "" };
+const ADMIN_KEY = "test-clinician-access-key";
+
+async function adminRequest(env, path, options = {}) {
+  return request(env, path, {
+    ...options,
+    headers: { authorization: `Bearer ${ADMIN_KEY}`, ...(options.headers || {}) },
+  });
+}
+
+const env = { DB: createMockDb(), ALLOWED_ORIGINS: "", ADMIN_API_KEY: ADMIN_KEY };
 const pin = "MHLKWM";
 const account = { id: "user-bright", alias: "Bright Otter", pin: "5093" };
 
@@ -243,6 +252,8 @@ assert.equal(result.payload.account.id, account.id);
 assert.match(result.payload.account.participantCode, /^DD-[A-Z0-9]{8}$/);
 
 result = await request(env, "/api/accounts");
+assert.equal(result.response.status, 401);
+result = await adminRequest(env, "/api/accounts");
 assert.equal(result.response.status, 200);
 assert.equal(result.payload.accounts.some((item) => item.alias === account.alias), true);
 
@@ -275,19 +286,19 @@ assert.equal(result.payload.account.id, sharedPinAccount.id);
 
 const firstScoreId = "score-bright";
 const secondScoreId = "score-shared";
-result = await request(env, "/api/records", {
+result = await adminRequest(env, "/api/records", {
   method: "POST",
   body: JSON.stringify({ id: firstScoreId, accountId: account.id, mode: "assessment", functional: { checklist: { sequencing: 3 } } }),
 });
 assert.equal(result.response.status, 201);
-result = await request(env, "/api/records", {
+result = await adminRequest(env, "/api/records", {
   method: "POST",
   body: JSON.stringify({ id: secondScoreId, accountId: sharedPinAccount.id, mode: "assessment", functional: { checklist: { sequencing: 1 } } }),
 });
 assert.equal(result.response.status, 201);
 
-const firstReport = await request(env, `/api/accounts/${account.id}/report`);
-const secondReport = await request(env, `/api/accounts/${sharedPinAccount.id}/report`);
+const firstReport = await adminRequest(env, `/api/accounts/${account.id}/report`);
+const secondReport = await adminRequest(env, `/api/accounts/${sharedPinAccount.id}/report`);
 assert.equal(firstReport.response.status, 200);
 assert.equal(secondReport.response.status, 200);
 assert.deepEqual(firstReport.payload.records.map((record) => record.id), [firstScoreId]);
@@ -295,7 +306,7 @@ assert.deepEqual(secondReport.payload.records.map((record) => record.id), [secon
 assert.equal(firstReport.payload.records[0].functional.checklist.sequencing, 3);
 assert.equal(secondReport.payload.records[0].functional.checklist.sequencing, 1);
 
-result = await request(env, "/api/sessions", {
+result = await adminRequest(env, "/api/sessions", {
   method: "POST",
   body: JSON.stringify({ pin }),
 });
@@ -320,7 +331,7 @@ const adminSnapshot = {
   },
 };
 
-result = await request(env, `/api/sessions/${pin}/snapshot`, {
+result = await adminRequest(env, `/api/sessions/${pin}/snapshot`, {
   method: "PUT",
   body: JSON.stringify({ snapshot: adminSnapshot }),
 });
@@ -365,13 +376,13 @@ result = await request(env, "/api/accounts", {
 });
 assert.equal(result.response.status, 201);
 
-result = await request(env, "/api/sessions", {
+result = await adminRequest(env, "/api/sessions", {
   method: "POST",
   body: JSON.stringify({ pin: secondPin }),
 });
 assert.equal(result.response.status, 201);
 
-result = await request(env, `/api/sessions/${secondPin}/snapshot`, {
+result = await adminRequest(env, `/api/sessions/${secondPin}/snapshot`, {
   method: "PUT",
   body: JSON.stringify({
     snapshot: {
@@ -419,7 +430,7 @@ result = await request(env, "/api/accounts", {
 });
 assert.equal(result.response.status, 201);
 
-result = await request(env, "/api/sessions", {
+result = await adminRequest(env, "/api/sessions", {
   method: "POST",
   body: JSON.stringify({ pin: noSnapshotPin }),
 });
@@ -452,7 +463,7 @@ const wrongPin = await request(env, `/api/sessions/${noSnapshotPin}/join`, {
 });
 assert.equal(wrongPin.response.status, 401);
 
-result = await request(env, `/api/accounts/${noSnapshotAccount.id}`, { method: "DELETE" });
+result = await adminRequest(env, `/api/accounts/${noSnapshotAccount.id}`, { method: "DELETE" });
 assert.equal(result.response.status, 200);
 result = await request(env, "/api/accounts", {
   method: "POST",
@@ -481,7 +492,7 @@ legacyDb.snapshots.set(legacyPin, {
   },
 });
 const legacyCoordinator = createMockSessionCoordinator();
-const legacyEnv = { DB: legacyDb, SESSION_DO: legacyCoordinator, ALLOWED_ORIGINS: "" };
+const legacyEnv = { DB: legacyDb, SESSION_DO: legacyCoordinator, ALLOWED_ORIGINS: "", ADMIN_API_KEY: ADMIN_KEY };
 
 result = await request(legacyEnv, `/api/sessions/${legacyPin}/snapshot`);
 assert.equal(result.response.status, 200);

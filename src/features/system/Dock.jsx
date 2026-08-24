@@ -1,12 +1,19 @@
 ﻿import { useVirtualOS } from "../../state/VirtualOSContext";
 
-export function Dock() {
+export function Dock({ onExit }) {
   const { goBack, goHome, state, toggleTabs, setTabsOpen } = useVirtualOS();
 
   function handleBack() {
     const ev = new CustomEvent("virtual-os-back", { cancelable: true });
     window.dispatchEvent(ev);
     if (!ev.defaultPrevented) {
+      const hasEarlierApp = (state.appHistory || []).some((app) => app && app !== "home");
+      const isAtPhoneHome = ["home", "instructions"].includes(state.currentApp) && !hasEarlierApp;
+      if (onExit && isAtPhoneHome) {
+        setTabsOpen(false);
+        onExit();
+        return;
+      }
       goBack();
     }
   }

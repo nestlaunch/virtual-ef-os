@@ -76,6 +76,13 @@ export const LEARN_APP_CATALOG = [
     purpose: "Understand app purposes, status information, and Android navigation controls.",
     domains: ["orientation", "visual scanning", "navigation"],
   },
+  {
+    id: "internet-connection",
+    label: "Connect to the Internet",
+    currentApp: "connectivity",
+    purpose: "Understand why internet is needed, recognise an offline message, and restore a connection.",
+    domains: ["problem solving", "error recognition", "sequencing"],
+  },
   ...APP_CATALOG,
 ];
 
